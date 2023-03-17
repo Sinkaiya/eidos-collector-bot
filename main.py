@@ -1,4 +1,3 @@
-from getpass import getpass
 from mysql.connector import connect, Error
 import configparser
 
@@ -11,13 +10,15 @@ try:
         port=3306,
         user=config.get('mysql', 'user'),
         password=config.get('mysql', 'password'),
-        database='vda'
+        database="vda"
     ) as connection:
 
         # value_to_add = 'А тою же ночью, в чулане, кот Василий Васильевич, запертый под замок за покушение на разбой, ' \
         #                'орал хриплым мявом и не хотел даже ловить мышей, – сидел у двери и мяукал так, что самому ' \
         #                'было неприятно.'
-        # write_db_query = "INSERT INTO `vda`.`108_messages` (`chapter`) VALUES ('" + value_to_add + "');"
+        # value_to_add = 'Test record # 2.'
+        # write_db_query = 'INSERT INTO `vda`.`108_messages` (`chapter`) VALUES ('Test record # 2.');"
+        # write_db_query = "INSERT INTO `vda`.`108_messages` (`chapter`) VALUES (%s)", value_to_add
         # with connection.cursor() as cursor:
         #     cursor.execute(write_db_query)
 
