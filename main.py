@@ -13,46 +13,21 @@ try:
         database="vda"
     ) as connection:
 
-        # value_to_add = 'А тою же ночью, в чулане, кот Василий Васильевич, запертый под замок за покушение на разбой, ' \
-        #                'орал хриплым мявом и не хотел даже ловить мышей, – сидел у двери и мяукал так, что самому ' \
-        #                'было неприятно.'
-        # value_to_add = 'Test record # 2.'
-        # write_db_query = 'INSERT INTO `vda`.`108_messages` (`chapter`) VALUES ('Test record # 2.');"
-        # write_db_query = "INSERT INTO `vda`.`108_messages` (`chapter`) VALUES (%s)", value_to_add
-        # with connection.cursor() as cursor:
-        #     cursor.execute(write_db_query)
-
-        # show_db_query = "SHOW COLUMNS from `108_messages`;"
-        # show_db_query = "SELECT * FROM `108_messages`;"
-        show_db_query = "SHOW COLUMNS FROM `108_messages`;"
+        number_to_add = '4'
+        value_to_add = 'Test record # 44.'
+        insert_query = "INSERT INTO `108_messages` (`id`, `chapter`) VALUES (%s, %s);"
         with connection.cursor() as cursor:
-            cursor.execute(show_db_query)
-            for db in cursor:
-                print(db)
+            cursor.execute(insert_query, [number_to_add, value_to_add])
+        connection.commit()
+
+        # show_db_query = "SHOW COLUMNS FROM `108_messages`;"
+        # with connection.cursor() as cursor:
+        #     cursor.execute(show_db_query)
+        #     for db in cursor:
+        #         print(db)
 
 except Error as e:
     print(e)
-
-# Connect to server
-# cnx = mysql.connector.connect(
-#     host="127.0.0.1",
-#     port=3306,
-#     user=input("Enter username: "),
-#     password=getpass("Enter password: "))
-
-# Get a cursor
-# cur = cnx.cursor()
-
-# Execute a query
-# cur.execute("USE `vda`;")
-# cur.execute('SHOW TABLES;')
-
-# Fetch one result
-# row = cur.fetchone()
-# print(row)
-
-# Close connection
-# cnx.close()
 
 # TODO Парсер текстового файла, который будет проходить по 108 посланиям и каждое из них писать в отдельную ячейку БД.
 
