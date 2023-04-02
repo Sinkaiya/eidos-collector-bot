@@ -15,7 +15,7 @@ try:
         text_file = open('letters.txt', 'r', encoding='utf8')
         for line in text_file.readlines():
 
-            insert_query = "INSERT INTO `108_messages` (`chapter`) VALUES (%s)"
+            insert_query = "INSERT INTO `vda_messages` (`text`) VALUES (%s)"
             with connection.cursor() as cursor:
                 line = line.strip()
                 if len(line) > 0:
