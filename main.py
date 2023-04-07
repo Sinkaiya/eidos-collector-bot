@@ -36,7 +36,7 @@ def get_chapter(chapter_id):
 
 def check_on_hold(user_id):
     with connection.cursor() as cursor:
-        cursor.execute("SELECT `on_hold` FROM `vda_users` WHERE `id` = %s ;" % user_id)
+        cursor.execute("SELECT `on_hold` FROM `vda_users` WHERE `id` = %s;" % user_id)
         result = cursor.fetchall()
         on_hold_status = result[0][0]
     if on_hold_status == 1:
@@ -45,16 +45,31 @@ def check_on_hold(user_id):
         return False
 
 
+# def db_update(table_name, cell_name, value, row_id):
+#     # Example: UPDATE `vda_users` SET `last_chapter_sent` = '2' WHERE `id`='2';
+#     # update_query = "UPDATE `" + \
+#     #                table_name + "` SET `" + \
+#     #                cell_name + "` = '" + \
+#     #                value + "' WHERE `id` = '" + \
+#     #                row_id + "';"
+#     with connection.cursor() as cursor:
+#         cursor.execute("UPDATE %s SET %s = %s WHERE `id` = %s;" % (table_name, cell_name, value, row_id))
+#         # cursor.execute(update_query)
+#         connection.commit()
+
+
 def db_update(table_name, cell_name, value, row_id):
-    # Example: UPDATE `vda_users` SET `last_chapter_sent` = '2' WHERE `id`='2';
-    update_query = "UPDATE `" + \
-                   table_name + "` SET `" + \
-                   cell_name + "` = '" + \
-                   value + "' WHERE `id` = '" + \
-                   row_id + "';"
     with connection.cursor() as cursor:
-        cursor.execute(update_query)
+        query = "UPDATE {table_name} SET {cell_name} = %s WHERE `id` = %s;"
+        cursor.execute(query, (table_name, cell_name), value, row_id)
         connection.commit()
+
+
+
+# def db_update(table_name, column_name, value, row_id):
+#     with connection.cursor() as cursor:
+#         cursor.execute("UPDATE {table_name} SET {column_name} = %s WHERE id = %s;" .format(table_name, column_name, value), row_id)
+#         connection.commit()
 
 
 def db_table_rows_count(table_name):
@@ -82,14 +97,14 @@ try:
         #  позицию на следующую.
         # [ ] 1. Проходим по таблице с пользователями. Вытаскиваем каждого пользователя по id.
         # Получаем количество пользователей.
-        table_for_count = 'vda_users'
-        users_count = db_table_rows_count(table_for_count)
-
-        for user in range(1, users_count + 1):
-
-            # [x] 2. Проверяем статус on_hold, если он True - идём к следующему пользователю.
-            if check_on_hold(user):
-                continue
+        # table_for_count = 'vda_users'
+        # users_count = db_table_rows_count(table_for_count)
+        #
+        # for user in range(1, users_count + 1):
+        #
+        #     # [x] 2. Проверяем статус on_hold, если он True - идём к следующему пользователю.
+        #     if check_on_hold(user):
+        #         continue
 
             # [ ] 3. Получаем его last_chapter_sent параметр.
             # TODO Можно реализовать через ту же функцию, что и получение on-hold-статуса
@@ -101,9 +116,9 @@ try:
         # [x] 8. Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
         table_name = 'vda_users'
         cell_name = 'last_chapter_sent'
-        value = '3'
+        value = '6'
         row_id = '2'
-        # db_update(table_name, cell_name, value, row_id)
+        db_update(table_name, cell_name, value, row_id)
 
 
 except Error as e:
