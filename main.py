@@ -8,7 +8,7 @@ bot_token = config.get('telegram', 'token')
 
 
 def get_text(table_name, text_id):
-    """Gets text from DB.
+    """Gets text pieces from DB.
 
     :param table_name: the name of the DB table we are getting the data from
     :type table_name: str
@@ -16,12 +16,11 @@ def get_text(table_name, text_id):
     :type text_id: str
 
     :rtype: str
-    :return: the requered text from the DB
-
+    :return: the requered text piece from the DB
     """
-    select_query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
+    query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
     with connection.cursor() as cursor:
-        cursor.execute(select_query, [text_id])
+        cursor.execute(query, [text_id])
         result = cursor.fetchall()
         for row in result:
             text = "".join(row[0].decode("utf8"))
@@ -29,10 +28,20 @@ def get_text(table_name, text_id):
         return text
 
 
-def get_user_data(telegram_user_id):
-    select_query = "SELECT `telegram_id`, `last_chapter_sent`, `on_hold` FROM `vda_users` WHERE id = %s;"
+def get_user_data(user_id):
+    """Gets the user data from DB.
+
+    :param user_id: the id of the user in the DB table
+    :type user_id: str or int
+
+    :rtype: (str, str, str)
+    :return: the user's telegram id,
+             the users personal DB table name,
+             the id of the last text piece that has been sent to user
+    """
+    query = "SELECT `telegram_id`, `last_sent_id`, `user_table_name` FROM `users` WHERE id = %s;"
     with connection.cursor() as cursor:
-        cursor.execute(select_query, [telegram_user_id])
+        cursor.execute(query, [user_id])
         result = cursor.fetchall()
         telegram_id = result[0][0]
         last_chapter_sent = result[0][1]
