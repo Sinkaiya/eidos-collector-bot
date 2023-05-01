@@ -1,26 +1,35 @@
 from mysql.connector import connect, Error
 import configparser
 from aiogram import Bot, Dispatcher, executor, types
-import time
-import logging
 
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8-sig')
-
 bot_token = config.get('telegram', 'token')
 
 
-def get_text(text_id):  # tested
-    select_query = "SELECT `text` FROM `vda_messages` WHERE `id` = %s;"
+def get_text(table_name, text_id):
+    """Gets text from DB.
+
+    :param table_name: the name of the DB table we are getting the data from
+    :type table_name: str
+    :param text_id: the id of the text we are gettinng from the DB table
+    :type text_id: str
+
+    :rtype: str
+    :return: the requered text from the DB
+
+    """
+    select_query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
     with connection.cursor() as cursor:
         cursor.execute(select_query, [text_id])
         result = cursor.fetchall()
         for row in result:
             text = "".join(row[0].decode("utf8"))
+        print(type(text))
         return text
 
 
-def get_user_data(telegram_user_id):  # tested
+def get_user_data(telegram_user_id):
     select_query = "SELECT `telegram_id`, `last_chapter_sent`, `on_hold` FROM `vda_users` WHERE id = %s;"
     with connection.cursor() as cursor:
         cursor.execute(select_query, [telegram_user_id])
@@ -29,15 +38,6 @@ def get_user_data(telegram_user_id):  # tested
         last_chapter_sent = result[0][1]
         on_hold = result[0][2]
         return telegram_id, last_chapter_sent, on_hold
-
-
-# Пока эта функция вообще не нужна, на самом деле.
-# def db_update(table_name, cell_name, value, row_id):
-#     with connection.cursor() as cursor:
-#         # Может быть, всё запихнуть сразу в запрос через format? И в execute передавать только его?
-#         update_query = f"UPDATE `{table_name}` SET {cell_name} = %s WHERE `id` = %s;"
-#         cursor.execute(update_query, (value, row_id))
-#         connection.commit()
 
 
 def add_user_if_none(telegram_id):
@@ -159,7 +159,7 @@ async def message_handler(message: types.Message):
         telegram_id = message.from_user.username
         # Функция add_user проверяет, есть ли такой telegram id в нашей БД,
         # и если нет - добавляет его туда.
-        add_user(telegram_id)
+        add_user_if_none(telegram_id)
         # Теперь нужно решить, как будут отправляться послания.
         # Первое послание должно отправляться сразу, а последующие - в восемь часов утра.
         # Полагаю, достаточно сделать функцию с условной логикой, которая проверяет номер
@@ -179,7 +179,7 @@ async def help_handler(message: types.Message):
     # Проверяем, есть ли такой telegram id в нашей БД, и если нет - добавляем.
     # TODO По идее, нужно это делать после подтверждения от пользователя, я полагаю.
     #  После того, как он нажмёт кнопочку "Прислать первое письмо" или что-то типа того.
-    add_user(telegram_id)
+    add_user_if_none(telegram_id)
 
 
 # Запускаем бота:
@@ -187,55 +187,3 @@ if __name__ == '__main__':
     executor.start_polling(dp)
 
 connection.close()
-
-# def check_on_hold(user_id):
-#     select_query = "SELECT `on_hold` FROM `vda_users` WHERE `id` = %s;"
-#     with connection.cursor() as cursor:
-#         cursor.execute(select_query, [user_id])
-#         result = cursor.fetchall()
-#         on_hold_status = result[0][0]
-#     if on_hold_status == 1:
-#         return True
-#     else:
-#         return False
-#
-#
-# def get_last_chapter_sent_id(user_id):
-#     select_query = "SELECT `last_chapter_sent` FROM `vda_users` WHERE `id` = %s;"
-#     with connection.cursor() as cursor:
-#         cursor.execute(select_query, [user_id])
-#         result = cursor.fetchall()
-#         last_chapter_sent_id = result[0][0]
-#         return last_chapter_sent_id
-#
-#
-# def get_telegram_id(user_id):
-#     select_query = "SELECT `telegram_id` FROM `vda_users` WHERE `id` = %s;"
-#     with connection.cursor() as cursor:
-#         cursor.execute(select_query, [user_id])
-#         result = cursor.fetchall()
-#         telegram_id = result[0][0]
-#         return telegram_id
-#
-#
-# def get_from_db(cell_name, table_name, row_id):
-#     select_query = f"SELECT `{cell_name}` FROM `{table_name}` WHERE `id` = %s;"
-#     with connection.cursor() as cursor:
-#         cursor.execute(select_query, [row_id])
-#         result = cursor.fetchall()
-#         if cell_name == 'on_hold':  # def check_on_hold
-#             on_hold_status = result[0][0]
-#             if on_hold_status == 1:
-#                 return True
-#             else:
-#                 return False
-#         elif cell_name == 'last_chapter_sent':  # def get_last_chapter_sent_id()
-#             last_chapter_sent = result[0][0]
-#             return last_chapter_sent
-#         elif cell_name == 'text':  # def get_text()
-#             for row in result:
-#                 text = "".join(row[0].decode("utf8"))
-#             return text
-#         elif cell_name == 'telegram_id':  # def get_telegram_id()
-#             telegram_id = result[0][0]
-#             return telegram_id
