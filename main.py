@@ -1,10 +1,16 @@
 from mysql.connector import connect, Error
 import configparser
 from aiogram import Bot, Dispatcher, executor, types
+import time
+import logging
 
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8-sig')
 bot_token = config.get('telegram', 'token')
+logging.basicConfig(level=logging.INFO,
+                    filename="vda_bot.log",
+                    filemode="a",
+                    format="%(asctime)s %(levelname)s %(message)s")
 
 
 def get_text(table_name, text_id):
@@ -50,16 +56,33 @@ def get_user_data(user_id):
 
 
 def add_user_if_none(telegram_id):
+    """Checks if a user with such telegram id is present in the DB already,
+        and creates a new entry if there is no such user in the DB.
+
+    :param telegram_id: the telegram id of the user
+    :type telegram_id: str
+
+    :return: True of False, depending on whether everything worked correctly
+    :rtype: bool
+    """
     # Checking if there is a specific user in the db already:
-    search_query = "SELECT `id` FROM `vda_users` WHERE `telegram_id`=(%s);"
+    search_query = "SELECT `id` FROM `users` WHERE `telegram_id`=(%s);"
     with connection.cursor() as cursor:
         cursor.execute(search_query, [telegram_id])
-        # Adding a new user into the db:
+        logging.info(f'Searching for user {telegram_id} in the DB.')
+        # Adding a new user into the db if absent:
         if cursor.fetchone() is None:
-            insert_query = "INSERT INTO `vda_users` (`telegram_id`,`last_chapter_sent`, `on_hold`) " \
-                           "VALUES (%s, '0', '0');"
-            cursor.execute(insert_query, [telegram_id])
-            connection.commit()
+            logging.info(f'Search for user {telegram_id} performed. User not found. Adding user...')
+            insert_query = "INSERT INTO `users` (`telegram_i`, " \
+                           "`last_sent_id`, `user_table_name`) VALUES (%s, '0', '0');"
+            try:
+                cursor.execute(insert_query, [telegram_id])
+                connection.commit()
+                logging.info(f'User {telegram_id} added to the DB.')
+                return True
+            except Exception as e:
+                logging.error(f'An attempt to add a new user to the DB failed: {e}', exc_info=True)
+                return False
 
 
 def set_last_chapter_sent(last_chapter_sent, user_id):
@@ -67,7 +90,6 @@ def set_last_chapter_sent(last_chapter_sent, user_id):
         update_query = "UPDATE `vda_users` SET `last_chapter_sent` = %s WHERE `id` = %s"
         cursor.execute(update_query, (last_chapter_sent, user_id))
         connection.commit()
-
 
 
 def db_table_rows_count(table_name):
