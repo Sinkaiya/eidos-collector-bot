@@ -21,17 +21,24 @@ def get_text(table_name, text_id):
     :param text_id: the id of the text we are gettinng from the DB table
     :type text_id: str
 
-    :rtype: str
-    :return: the requered text piece from the DB
+    :return: the requered text piece from the DB or False if there was an error
+    :rtype: str or bool
     """
     query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
+    logging.info(f'Trying to acquire text piece # {text_id} from the `{table_name}` table.')
     with connection.cursor() as cursor:
-        cursor.execute(query, [text_id])
-        result = cursor.fetchall()
-        for row in result:
-            text = "".join(row[0].decode("utf8"))
-        print(type(text))
-        return text
+        try:
+            cursor.execute(query, [text_id])
+            result = cursor.fetchall()
+            for row in result:
+                text = "".join(row[0].decode("utf8"))
+            logging.info(f'The text piece # {text_id} from the `{table_name}` table '
+                         f'successfully acquired.')
+            return text
+        except Exception as e:
+            logging.error(f'An attempt to acquire the text piece # {text_id} '
+                          f'from the `{table_name}` table failed: {e}', exc_info=True)
+            return False
 
 
 def get_user_data(user_id):
