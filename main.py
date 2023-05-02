@@ -1,7 +1,6 @@
 from mysql.connector import connect, Error
 import configparser
 from aiogram import Bot, Dispatcher, executor, types
-import time
 import logging
 
 config = configparser.ConfigParser()
@@ -101,11 +100,32 @@ def add_user_if_none(telegram_id):
                 return False
 
 
-def set_last_chapter_sent(last_chapter_sent, user_id):
+def set_last_sent(last_sent_id, user_id):
+    """Writes the id of the last piece of text that has been sent to the user,
+    to the user's entry in 'users' DB table.
+
+    :param last_sent_id: the id of the last text piece that has been sent to the user
+    :type last_sent_id: str
+    :param user_id: the id of the user's record in the DB
+    :type user_id: str
+
+    :return: True of False, depending on whether everything worked correctly
+    :rtype: bool
+    """
+    logging.info(f'Trying to write the text piece # {last_sent_id} '
+                 f'for the user # {user_id} into the DB.')
     with connection.cursor() as cursor:
-        update_query = "UPDATE `vda_users` SET `last_chapter_sent` = %s WHERE `id` = %s"
-        cursor.execute(update_query, (last_chapter_sent, user_id))
-        connection.commit()
+        try:
+            update_query = "UPDATE `users` SET `last_sent_id` = %s WHERE `id` = %s"
+            cursor.execute(update_query, (last_sent_id, user_id))
+            connection.commit()
+            logging.info(f'An attempt to write the text piece # {last_sent_id} '
+                         f'for the user # {user_id} into the DB successful.')
+            return True
+        except Exception as e:
+            logging.error(f'An attempt to write the text piece # {last_sent_id} '
+                          f'for the user # {user_id} into the DB failed: {e}', exc_info=True)
+            return False
 
 
 def db_table_rows_count(table_name):
@@ -117,20 +137,9 @@ def db_table_rows_count(table_name):
         return row_count
 
 
-# TODO функция, обрабатывающая on_hold-статус.
-def process_on_hold_status():
-    pass
-
-
 def send_text_from_db_to_users():
     """
-    # Функция, проходящая по таблице с пользователями и отправляющая каждому нужный
-    # кусочек текста. находящая в таблице с пользователями конкретного, проверяющая его
-    # on_hold-статус, находящая нужный текст в БД, отправляющая пользователю и обновляющая
-    # позицию на следующую. Скорее всего, нужно будет запихнуть всё это в асинхронку сверху.
-    # Или оставить её только для /start, а для обработки других событий написать ещё.
-    # И для этого нужно будет как-то передавать из одной в другую telegram_id. Или просто
-    # расширить уже существующую функцию, потому что кнопок-то на самом деле будет не так много.
+
     """
     # Проходим по таблице с пользователями, вытаскивая каждого по id.
     # Получаем количество пользователей.
@@ -165,7 +174,7 @@ def send_text_from_db_to_users():
         # TODO если что-то не шлётся несколько раз - видимо, нужно что-то сделать (сказать
         #  пользователю и отправить мне уведомление)
         # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
-        set_last_chapter_sent(new_chapter_id, user_id)
+        set_last_sent(new_chapter_id, user_id)
 
 
 try:
