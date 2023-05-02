@@ -47,19 +47,28 @@ def get_user_data(user_id):
     :param user_id: the id of the user in the DB table
     :type user_id: str or int
 
-    :rtype: (str, str, str)
     :return: the user's telegram id,
              the users personal DB table name,
              the id of the last text piece that has been sent to user
+             or False if there was an error
+        :rtype: (str, str, str) or bool
     """
     query = "SELECT `telegram_id`, `last_sent_id`, `user_table_name` FROM `users` WHERE id = %s;"
+    logging.info(f'Trying to acquire the data about the user # {user_id} from the `users` table.')
     with connection.cursor() as cursor:
-        cursor.execute(query, [user_id])
-        result = cursor.fetchall()
-        telegram_id = result[0][0]
-        last_chapter_sent = result[0][1]
-        on_hold = result[0][2]
-        return telegram_id, last_chapter_sent, on_hold
+        try:
+            cursor.execute(query, [user_id])
+            result = cursor.fetchall()
+            telegram_id = result[0][0]
+            last_chapter_sent = result[0][1]
+            on_hold = result[0][2]
+            logging.info(f'The data about the user # {user_id} from the `users` table '
+                         f'successfully acquired.')
+            return telegram_id, last_chapter_sent, on_hold
+        except Exception as e:
+            logging.error(f'An attempt to acquire the data about the user # {user_id} '
+                          f'from the `users` table failed: {e}', exc_info=True)
+            return False
 
 
 def add_user_if_none(telegram_id):
@@ -80,10 +89,10 @@ def add_user_if_none(telegram_id):
         # Adding a new user into the db if absent:
         if cursor.fetchone() is None:
             logging.info(f'Search for user {telegram_id} performed. User not found. Adding user...')
-            insert_query = "INSERT INTO `users` (`telegram_i`, " \
-                           "`last_sent_id`, `user_table_name`) VALUES (%s, '0', '0');"
+            insert_query = "INSERT INTO `users` (`telegram_id`, " \
+                           "`last_sent_id`, `user_table_name`) VALUES (%s, '0', %s);"
             try:
-                cursor.execute(insert_query, [telegram_id])
+                cursor.execute(insert_query, [telegram_id, telegram_id])
                 connection.commit()
                 logging.info(f'User {telegram_id} added to the DB.')
                 return True
