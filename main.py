@@ -100,6 +100,32 @@ def add_user_if_none(telegram_id):
                 return False
 
 
+def create_user_table(telegram_id):
+    """Creates a special table in the DB which belongs to the specific user and contains
+    this user's ideas.
+
+    :param telegram_id: the telegram id of the user
+    :type telegram_id: str
+
+    :return: True of False, depending on whether everything worked correctly
+    :rtype: bool
+    """
+    create_query = f"CREATE TABLE IF NOT EXISTS `{telegram_id}` (`id` INT PRIMARY KEY " \
+                   f"AUTO_INCREMENT NOT NULL, `text` TEXT NOT NULL) ENGINE=InnoDB;"
+    rights_assignment_query = f""
+    logging.info(f'Creating a personal table for user {telegram_id}...')
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute(create_query)
+            connection.commit()
+            logging.info(f'A personal table for user {telegram_id} has been created successfully.')
+            return True
+        except Exception as e:
+            logging.error(f'An attempt to create a personal table for user {telegram_id} '
+                          f'failed: {e}', exc_info=True)
+            return False
+
+
 def set_last_sent(last_sent_id, user_id):
     """Writes the id of the last piece of text that has been sent to the user,
     to the user's entry in 'users' DB table.
