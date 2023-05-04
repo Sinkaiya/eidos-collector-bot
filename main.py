@@ -188,12 +188,13 @@ def db_table_rows_count(table_name):
 
 
 def send_text_from_db_to_users():
-    """
+    """Iterates over the list of users and sends each other of them his own piece of text,
+     according to the user's data.
 
+    :return: True of False, depending on whether everything worked correctly
+    :rtype: bool
     """
-    # Проходим по таблице с пользователями, вытаскивая каждого по id.
-    # Получаем количество пользователей.
-    table_for_count = 'vda_users'
+    table_for_count = 'users'
     users_count = db_table_rows_count(table_for_count)
     # TODO Здесь проблема: если пользователь был удалён из БД, в нумерации образуется дырка,
     #  и мы получаем index out of range. Нужно это как-то предотвратить.
