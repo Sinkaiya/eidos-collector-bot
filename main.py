@@ -21,7 +21,7 @@ def get_text(table_name, text_id):
     :type text_id: str
 
     :return: the requered text piece from the DB or False if there was an error
-    :rtype: str or bool
+    :rtype: str or bool (if something went wrong)
     """
     query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
     logging.info(f'Trying to acquire text piece # {text_id} from the `{table_name}` table.')
@@ -50,7 +50,7 @@ def get_user_data(user_id):
              the users personal DB table name,
              the id of the last text piece that has been sent to user
              or False if there was an error
-        :rtype: (str, str, str) or bool
+        :rtype: (str, str, str) or bool (if something went wrong)
     """
     query = "SELECT `telegram_id`, `last_sent_id`, `user_table_name` FROM `users` WHERE id = %s;"
     logging.info(f'Trying to acquire the data about the user # {user_id} from the `users` table.')
@@ -112,7 +112,6 @@ def create_user_table(telegram_id):
     """
     create_query = f"CREATE TABLE IF NOT EXISTS `{telegram_id}` (`id` INT PRIMARY KEY " \
                    f"AUTO_INCREMENT NOT NULL, `text` TEXT NOT NULL) ENGINE=InnoDB;"
-    rights_assignment_query = f""
     logging.info(f'Creating a personal table for user {telegram_id}...')
     with connection.cursor() as cursor:
         try:
@@ -156,7 +155,6 @@ def set_user_data(user_id, user_data_type, user_data):
             return False
 
 
-
 # TEMPORARY CODE START
 # current_user_id = 1
 # current_user_data_type = 'user_table_name'
@@ -166,12 +164,27 @@ def set_user_data(user_id, user_data_type, user_data):
 
 
 def db_table_rows_count(table_name):
+    """Calculates the number of records in a table.
+
+    :param table_name: a name of the table we need to count records in
+    :type table_name: str
+
+    :return: the number of records
+    :rtype: int or bool (if something went wrong)
+    """
     select_query = f"SELECT COUNT(*) FROM `{table_name}`;"
+    logging.info(f'Calculating the number of records in the `{table_name}` table...')
     with connection.cursor() as cursor:
-        cursor.execute(select_query)
-        result = cursor.fetchall()
-        row_count = result[0][0]
-        return row_count
+        try:
+            cursor.execute(select_query)
+            result = cursor.fetchall()
+            row_count = result[0][0]
+            logging.info(f'The number of records in the `{table_name}` table calculated successfully.')
+            return row_count
+        except Exception as e:
+            logging.error(f'An attempt calculate the number of records '
+                          f'in the `{table_name}` table failed: {e}', exc_info=True)
+            return False
 
 
 def send_text_from_db_to_users():
@@ -214,6 +227,7 @@ def send_text_from_db_to_users():
         set_last_sent(new_chapter_id, user_id)
 
 
+# TODO I guess we should add some logging here as well. :3
 try:
     connection = connect(host="127.0.0.1",
                          port=3306,
