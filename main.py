@@ -126,32 +126,43 @@ def create_user_table(telegram_id):
             return False
 
 
-def set_last_sent(last_sent_id, user_id):
-    """Writes the id of the last piece of text that has been sent to the user,
-    to the user's entry in 'users' DB table.
+def set_user_data(user_id, user_data_type, user_data):
+    """Writes the data into the `users` table; updates the specific field in this table,
+    depending on the `user_data_type` parameter.
 
-    :param last_sent_id: the id of the last text piece that has been sent to the user
-    :type last_sent_id: str
-    :param user_id: the id of the user's record in the DB
-    :type user_id: str
+    :param user_id: the id of the user in the DB table
+    :type user_id: str or int
+    :param user_data_type: the field of the `users` table that should be updated
+    :type user_data_type: str
+    :param user_data: the data that should be written into the specific field of the `users` table
+    :type user_data: str
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
-    logging.info(f'Trying to write the text piece # {last_sent_id} '
-                 f'for the user # {user_id} into the DB.')
+    update_query = f"UPDATE `users` SET `{user_data_type}` = %s WHERE `id` = %s"
     with connection.cursor() as cursor:
         try:
-            update_query = "UPDATE `users` SET `last_sent_id` = %s WHERE `id` = %s"
-            cursor.execute(update_query, (last_sent_id, user_id))
+            logging.info(f'Trying to update the `{user_data_type}` field with `{user_data}` value '
+                         f'for the user `{user_id}` in the `users` DB table.')
+            cursor.execute(update_query, (user_data, user_id))
             connection.commit()
-            logging.info(f'An attempt to write the text piece # {last_sent_id} '
-                         f'for the user # {user_id} into the DB successful.')
+            logging.info(f'An attempt to update the `{user_data_type}` field with `{user_data}` value '
+                         f'for the user `{user_id}` in the `users` DB table has been successful.')
             return True
         except Exception as e:
-            logging.error(f'An attempt to write the text piece # {last_sent_id} '
-                          f'for the user # {user_id} into the DB failed: {e}', exc_info=True)
+            logging.error(f'An attempt to update the `{user_data_type}` field with `{user_data}` value '
+                          f'for the user `{user_id}` in the `users` DB table failed: {e}', exc_info=True)
             return False
+
+
+
+# TEMPORARY CODE START
+# current_user_id = 1
+# current_user_data_type = 'user_table_name'
+# current_user_data = 'sinkaiya'
+# set_user_data(current_user_id, current_user_data_type, current_user_data)
+# TEMPORARY CODE END
 
 
 def db_table_rows_count(table_name):
