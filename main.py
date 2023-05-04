@@ -2,6 +2,7 @@ from mysql.connector import connect, Error
 import configparser
 from aiogram import Bot, Dispatcher, executor, types
 import logging
+import time
 
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8-sig')
@@ -10,6 +11,44 @@ logging.basicConfig(level=logging.INFO,
                     filename="vda_bot.log",
                     filemode="a",
                     format="%(asctime)s %(levelname)s %(message)s")
+
+
+def connect_to_db(host, port, user, password, database):
+    """Connects to a MySQL database.
+
+    :param host: host address
+    :type host: str
+    :param port: port number
+    :type port: int
+    :param user: username
+    :type user: str
+    :param password: password
+    :type password: str
+    :param database: DB name
+    :type database: str
+
+    :return: connection
+    :rtype: mysql.connector.connection
+    """
+    for attempt in range(1, 11):
+        logging.info(f'Trying to connect to the database. Attempt {attempt} of 10...')
+
+        try:
+            connection = connect(host=host,
+                                 port=port,
+                                 user=user,
+                                 password=password,
+                                 database=database)
+        except Exception as e:
+            logging.error(f'An attempt to connect to the database failed: {e}', exc_info=True)
+            time.sleep(5)
+            continue
+
+        if connection.is_connected():
+            logging.info(f'The connection to the database established successfully.')
+            break
+
+    return connection
 
 
 def get_text(table_name, text_id):
@@ -228,16 +267,12 @@ def send_text_from_db_to_users():
         set_last_sent(new_chapter_id, user_id)
 
 
-# TODO I guess we should add some logging here as well. :3
-try:
-    connection = connect(host="127.0.0.1",
-                         port=3306,
-                         user=config.get('mysql', 'user'),
-                         password=config.get('mysql', 'password'),
-                         database="vda")
-except Error as db_error_msg:
-    print(db_error_msg)
-    # TODO добавить сюда функцию, оповещающую меня, если что-то пошло не так.
+host = "127.0.0.1"
+port = 3306
+user = config.get('mysql', 'user')
+password = config.get('mysql', 'password')
+database = "vda"
+current_connection = connect_to_db(host, port, user, password, database)
 
 # Создаём экземпляры классов Bot и Dispatcher, к боту привязываем токен,
 # а к диспетчеру - самого бота.
@@ -294,4 +329,4 @@ async def help_handler(message: types.Message):
 if __name__ == '__main__':
     executor.start_polling(dp)
 
-connection.close()
+current_connection.close()
