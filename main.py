@@ -129,77 +129,33 @@ def get_user_data(user_id):
                 return False
 
 
-def add_user_if_none(telegram_id):
-    """Checks if a user with such telegram id is present in the DB already,
-        and creates a new entry if there is no such user in the DB.
-
-    :param telegram_id: the telegram id of the user
-    :type telegram_id: str
-
-    :return: True of False, depending on whether everything worked correctly
-    :rtype: bool
-    """
-    # Checking if there is a specific user in the db already:
-    search_query = "SELECT `id` FROM `users` WHERE `telegram_id`=(%s);"
-    logging.info(f'Checking if the user {telegram_id} is present in the DB already.')
-    connection = connect_to_db(**db_config)
-    with connection.cursor() as cursor:
-        try:
-            cursor.execute(search_query, [telegram_id])
-        except Exception as e:
-                logging.error(f'An attempt to check if the user {telegram_id} '
-                              f'is present in the DB already failed: {e}', exc_info=True)
-        # Adding a new user into the db if absent:
-        if cursor.fetchone() is None:
-            logging.info(f'Search for user {telegram_id} performed. User not found. '
-                         f'Adding user...')
-            insert_query = "INSERT INTO `users` (`telegram_id`, " \
-                           "`last_sent_id`, `user_table_name`) VALUES (%s, '0', %s);"
-            try:
-                cursor.execute(insert_query, [telegram_id, telegram_id])
-                connection.commit()
-                logging.info(f'User {telegram_id} added to the DB.')
-                connection.close()
-                logging.info(f'Connection to the database closed.')
-                return True
-            except Exception as e:
-                logging.error(f'An attempt to add a new user to the DB '
-                              f'failed: {e}', exc_info=True)
-                connection.close()
-                logging.info(f'Connection to the database closed.')
-                return False
-        else:
-            logging.info(f'User {telegram_id} is in the database already. '
-                         f'No action is needed')
-            connection.close()
-            logging.info(f'Connection to the database closed.')
-
-
-def create_user_table(telegram_name):
+def create_user_table(telegram_id, telegram_name):
     """Creates a special table in the DB which belongs to the specific user and contains
     this user's ideas.
 
-    :param telegram_name: the name of the table we are creating for this user;
-           the same with telegram_name
+    :param telegram_id: unique numeric identifier of user's telegram account
+    :type telegram_id: int
+    :param telegram_name: user's telegram name
     :type telegram_name: str
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
     error = False
-    create_query = f"CREATE TABLE IF NOT EXISTS `{telegram_name}` (`id` INT PRIMARY KEY " \
+    table_name = str(telegram_id)
+    create_query = f"CREATE TABLE IF NOT EXISTS `{table_name}` (`id` INT PRIMARY KEY " \
                    f"AUTO_INCREMENT NOT NULL, `text` TEXT NOT NULL) ENGINE=InnoDB;"
-    logging.info(f'Creating a personal table for user {telegram_name}...')
+    logging.info(f'Creating a personal table for user {telegram_id} ({telegram_name})...')
     connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(create_query)
             connection.commit()
-            logging.info(f'A personal table for user {telegram_name} has been '
-                         f'created successfully.')
+            logging.info(f'A personal table for user {telegram_id} ({telegram_name}) '
+                         f'has been created successfully.')
         except Exception as e:
-            logging.error(f'An attempt to create a personal table for user {telegram_name} '
-                          f'failed: {e}', exc_info=True)
+            logging.error(f'An attempt to create a personal table for '
+                          f'user {telegram_id} ({telegram_name}) failed: {e}', exc_info=True)
             error = True
         finally:
             connection.close()
@@ -208,6 +164,55 @@ def create_user_table(telegram_name):
                 return False
             else:
                 return True
+
+
+def add_user_if_none(telegram_id, telegram_name):
+    """Checks if a user with such telegram id is present in the DB already,
+        and creates a new entry if there is no such user in the DB.
+
+    :param telegram_id: unique numeric identifier of user's telegram account
+    :type telegram_id: int
+    :param telegram_name: the user's telegram name (the one that starts with @)
+    :type telegram_name: str
+
+    :return: True of False, depending on whether everything worked correctly
+    :rtype: bool
+    """
+    search_query = f"SELECT `id` FROM `users` WHERE `telegram_id` = {telegram_id};"
+    logging.info(f'Checking if the user {telegram_id} ({telegram_name}) is present '
+                 f'in the DB already.')
+    connection = connect_to_db(**db_config)
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute(search_query)
+        except Exception as e:
+            logging.error(f'An attempt to check if the user {telegram_id} ({telegram_name}) '
+                          f'is present in the DB already failed: {e}', exc_info=True)
+        if cursor.fetchone() is None:
+            logging.info(f'Search for user {telegram_id} ({telegram_name}) performed. '
+                         f'User not found. Adding user...')
+            insert_query = f"INSERT INTO `users` (`telegram_id`, `telegram_name`, " \
+                           f"`last_sent_id`, `user_table_name`) VALUES ('{telegram_id}', " \
+                           f"'{telegram_name}', '0', '{telegram_id}');"
+            try:
+                cursor.execute(insert_query)
+                connection.commit()
+                logging.info(f'User {telegram_id} ({telegram_name}) added to the DB.')
+                create_user_table(telegram_id, telegram_name)
+                connection.close()
+                logging.info(f'Connection to the database closed.')
+                return True
+            except Exception as e:
+                logging.error(f'An attempt to add user {telegram_id} ({telegram_name}) '
+                              f'to the DB failed: {e}', exc_info=True)
+                connection.close()
+                logging.info(f'Connection to the database closed.')
+                return False
+        else:
+            logging.info(f'User {telegram_id} ({telegram_name}) is in the database '
+                         f'already. No actions is needed')
+            connection.close()
+            logging.info(f'Connection to the database closed.')
 
 
 def set_user_data(user_id, user_data_type, user_data):
