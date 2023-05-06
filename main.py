@@ -12,6 +12,12 @@ logging.basicConfig(level=logging.INFO,
                     filemode="a",
                     format="%(asctime)s %(levelname)s %(message)s")
 
+db_config = {'host': "127.0.0.1",
+             'port': 3306,
+             'user': config.get('mysql', 'user'),
+             'password': config.get('mysql', 'password'),
+             'database': "vda"}
+
 
 def connect_to_db(host, port, user, password, database):
     """Connects to a MySQL database.
@@ -30,6 +36,7 @@ def connect_to_db(host, port, user, password, database):
     :return: connection
     :rtype: mysql.connector.connection
     """
+    connection = None
     for attempt in range(1, 11):
         logging.info(f'Trying to connect to the database. Attempt {attempt} of 10...')
 
@@ -62,6 +69,8 @@ def get_text(table_name, text_id):
     :return: the requered text piece from the DB or False if there was an error
     :rtype: str or bool (if something went wrong)
     """
+    text = None
+    connection = connect_to_db(**db_config)
     query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
     logging.info(f'Trying to acquire text piece # {text_id} from the `{table_name}` table.')
     with connection.cursor() as cursor:
@@ -72,11 +81,16 @@ def get_text(table_name, text_id):
                 text = "".join(row[0].decode("utf8"))
             logging.info(f'The text piece # {text_id} from the `{table_name}` table '
                          f'successfully acquired.')
-            return text
         except Exception as e:
             logging.error(f'An attempt to acquire the text piece # {text_id} '
                           f'from the `{table_name}` table failed: {e}', exc_info=True)
-            return False
+        finally:
+            connection.close()
+            logging.info(f'Connection to the database closed.')
+            if text:
+                return text
+            else:
+                return False
 
 
 def get_user_data(user_id):
@@ -246,7 +260,7 @@ def send_text_from_db_to_users():
         if on_hold == 1:
             continue
 
-        # Если пользователь не на холде - Получаем его last_chapter_sent параметр:
+        # Получаем его last_chapter_sent параметр:
         # номер последнего отправленного ему послания, чтобы понять, какое отправлять
         # следующее.
         # Получаем номер послания, которое мы отправим теперь:
@@ -266,13 +280,6 @@ def send_text_from_db_to_users():
         # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
         set_last_sent(new_chapter_id, user_id)
 
-
-host = "127.0.0.1"
-port = 3306
-user = config.get('mysql', 'user')
-password = config.get('mysql', 'password')
-database = "vda"
-current_connection = connect_to_db(host, port, user, password, database)
 
 # Создаём экземпляры классов Bot и Dispatcher, к боту привязываем токен,
 # а к диспетчеру - самого бота.
@@ -328,5 +335,3 @@ async def help_handler(message: types.Message):
 # Запускаем бота:
 if __name__ == '__main__':
     executor.start_polling(dp)
-
-current_connection.close()
