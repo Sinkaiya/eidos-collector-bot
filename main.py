@@ -1,4 +1,4 @@
-from mysql.connector import connect, Error
+from mysql.connector import connect
 import configparser
 from aiogram import Bot, Dispatcher, executor, types
 import logging
@@ -70,9 +70,9 @@ def get_text(table_name, text_id):
     :rtype: str or bool (if something went wrong)
     """
     text = None
-    connection = connect_to_db(**db_config)
     query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
     logging.info(f'Trying to acquire text piece # {text_id} from the `{table_name}` table.')
+    connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(query, [text_id])
@@ -103,10 +103,11 @@ def get_user_data(user_id):
              the users personal DB table name,
              the id of the last text piece that has been sent to user
              or False if there was an error
-        :rtype: (str, str, str) or bool (if something went wrong)
+    :rtype: (str, str, str) or bool (if something went wrong)
     """
     query = "SELECT `telegram_id`, `last_sent_id`, `user_table_name` FROM `users` WHERE id = %s;"
     logging.info(f'Trying to acquire the data about the user # {user_id} from the `users` table.')
+    connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(query, [user_id])
@@ -116,11 +117,16 @@ def get_user_data(user_id):
             on_hold = result[0][2]
             logging.info(f'The data about the user # {user_id} from the `users` table '
                          f'successfully acquired.')
-            return telegram_id, last_chapter_sent, on_hold
         except Exception as e:
             logging.error(f'An attempt to acquire the data about the user # {user_id} '
                           f'from the `users` table failed: {e}', exc_info=True)
-            return False
+        finally:
+            connection.close()
+            logging.info(f'Connection to the database closed.')
+            if result:
+                return telegram_id, last_chapter_sent, on_hold
+            else:
+                return False
 
 
 def add_user_if_none(telegram_id):
