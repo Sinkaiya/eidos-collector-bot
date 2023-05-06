@@ -175,29 +175,39 @@ def add_user_if_none(telegram_id):
             logging.info(f'Connection to the database closed.')
 
 
-def create_user_table(telegram_id):
+def create_user_table(telegram_name):
     """Creates a special table in the DB which belongs to the specific user and contains
     this user's ideas.
 
-    :param telegram_id: the telegram id of the user
-    :type telegram_id: str
+    :param telegram_name: the name of the table we are creating for this user;
+           the same with telegram_name
+    :type telegram_name: str
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
-    create_query = f"CREATE TABLE IF NOT EXISTS `{telegram_id}` (`id` INT PRIMARY KEY " \
+    error = False
+    create_query = f"CREATE TABLE IF NOT EXISTS `{telegram_name}` (`id` INT PRIMARY KEY " \
                    f"AUTO_INCREMENT NOT NULL, `text` TEXT NOT NULL) ENGINE=InnoDB;"
-    logging.info(f'Creating a personal table for user {telegram_id}...')
+    logging.info(f'Creating a personal table for user {telegram_name}...')
+    connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(create_query)
             connection.commit()
-            logging.info(f'A personal table for user {telegram_id} has been created successfully.')
-            return True
+            logging.info(f'A personal table for user {telegram_name} has been '
+                         f'created successfully.')
         except Exception as e:
-            logging.error(f'An attempt to create a personal table for user {telegram_id} '
+            logging.error(f'An attempt to create a personal table for user {telegram_name} '
                           f'failed: {e}', exc_info=True)
-            return False
+            error = True
+        finally:
+            connection.close()
+            logging.info(f'Connection to the database closed.')
+            if error:
+                return False
+            else:
+                return True
 
 
 def set_user_data(user_id, user_data_type, user_data):
