@@ -254,14 +254,6 @@ def set_user_data(user_id, user_data_type, user_data):
                 return True
 
 
-# TEMPORARY CODE START
-# current_user_id = 1
-# current_user_data_type = 'user_table_name'
-# current_user_data = 'sinkaiya'
-# set_user_data(current_user_id, current_user_data_type, current_user_data)
-# TEMPORARY CODE END
-
-
 def db_table_rows_count(table_name):
     """Calculates the number of records in a table.
 
@@ -273,17 +265,24 @@ def db_table_rows_count(table_name):
     """
     select_query = f"SELECT COUNT(*) FROM `{table_name}`;"
     logging.info(f'Calculating the number of records in the `{table_name}` table...')
+    connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(select_query)
             result = cursor.fetchall()
             row_count = result[0][0]
-            logging.info(f'The number of records in the `{table_name}` table calculated successfully.')
-            return row_count
+            logging.info(f'The number of records in the `{table_name}` table '
+                         f'calculated successfully.')
         except Exception as e:
             logging.error(f'An attempt calculate the number of records '
                           f'in the `{table_name}` table failed: {e}', exc_info=True)
-            return False
+        finally:
+            connection.close()
+            logging.info(f'Connection to the database closed.')
+            if result:
+                return row_count
+            else:
+                return False
 
 
 def send_text_from_db_to_users():
