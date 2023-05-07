@@ -105,26 +105,27 @@ def get_user_data(user_id):
              or False if there was an error
     :rtype: (str, str, str) or bool (if something went wrong)
     """
-    query = "SELECT `telegram_id`, `last_sent_id`, `user_table_name` FROM `users` WHERE id = %s;"
-    logging.info(f'Trying to acquire the data about the user # {user_id} from the `users` table.')
+    query = f"SELECT `telegram_id`, `telegram_name`, `last_sent_id`, `user_table_name` " \
+            f"FROM `users` WHERE telegram_id = {user_id};"
+    logging.info(f'Trying to acquire data for user {user_id}...')
     connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
-            cursor.execute(query, [user_id])
+            cursor.execute(query)
             result = cursor.fetchall()
             telegram_id = result[0][0]
-            last_chapter_sent = result[0][1]
-            on_hold = result[0][2]
-            logging.info(f'The data about the user # {user_id} from the `users` table '
-                         f'successfully acquired.')
+            telegram_name = result[0][1]
+            last_chapter_sent = result[0][2]
+            on_hold = result[0][3]
+            logging.info(f'The data for user {user_id} successfully acquired.')
         except Exception as e:
-            logging.error(f'An attempt to acquire the data about the user # {user_id} '
-                          f'from the `users` table failed: {e}', exc_info=True)
+            logging.error(f'An attempt to acquire data for user # {user_id} '
+                          f'failed: {e}', exc_info=True)
         finally:
             connection.close()
             logging.info(f'Connection to the database closed.')
             if result:
-                return telegram_id, last_chapter_sent, on_hold
+                return telegram_id, telegram_name, last_chapter_sent, on_hold
             else:
                 return False
 
