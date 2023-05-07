@@ -321,53 +321,46 @@ def get_telegram_ids(table_name):
                 return False
 
 
-def send_text_from_db_to_users():
+def send_text_to_users():
     """Iterates over the list of users and sends each other of them his own piece of text,
      according to the user's 'last_sent_id' :parameter.
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
-    users_count = db_table_rows_count('users')
+    current_table = 'users'
+    # users_count = db_table_rows_count(current_table)
     # If users_count > 1000, we should add some logic which processes users in batches
     # to save memory. But for now, since the quantity of users is not too large,
     # we can consider it as a feature to add in the future. :)
 
-    # get_user_data - может, сразу создавать словарь для пользователя? С его id? Like
-    # [1: {'telegram_id': 171717, 'table_name': '171717', 'last_sent_id': '7'}]
-    # NOPE!
+    # Getting a list with telegram_ids:
+    current_telegram_ids_list = get_telegram_ids(current_table)
 
-    # Creating a list with telegram_ids
+    for telegram_id in current_telegram_ids_list:
+        chat_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
 
+        # Setting an id of text which should be sent to current user.
+        # Checking if this id is not more than total count of texts
+        # in user's DB, to prevent 'index out of range' error:
+        user_table_size = db_table_rows_count(user_table_name)
+        new_last_sent_id = last_sent_id + 1
+        if new_last_sent_id > user_table_size:
+            new_last_sent_id = 1
 
-
-    # Получив количество пользователей, перебираем каждого из них.
-    for user_id in range(1, users_count + 1):
-        telegram_id, last_chapter_sent, on_hold = get_user_data(user_id)
-        # Для каждого пользователя роверяем статус on_hold, если он True -
-        # идём к следующему пользователю.
-        if on_hold == 1:
-            continue
-
-        # Получаем его last_chapter_sent параметр:
-        # номер последнего отправленного ему послания, чтобы понять, какое отправлять
-        # следующее.
-        # Получаем номер послания, которое мы отправим теперь:
-        new_chapter_id = last_chapter_sent + 1
-        # print('new chapter id = ', new_chapter_id)  # TEMPORARY STRING
-
-        # Вытаскиваем соответствующее послание из таблицы с текстами, обращаясь по id.
-        new_chapter = get_text(new_chapter_id)
-
-        # Отправляем пользователю сообщение с посланием.
-        bot.send_message(telegram_id, new_chapter)
+        new_text_to_send = get_text(user_table_name, new_last_sent_id)
+        # bot.send_message(telegram_id, new_text_to_send)
 
         # Убеждаемся, что сообщение доставлено. (КАК?)
         # Если сообщение не доставлено - пытаемся отправить ещё раз.
         # TODO если что-то не шлётся несколько раз - видимо, нужно что-то сделать (сказать
         #  пользователю и отправить мне уведомление)
+
         # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
-        set_last_sent(new_chapter_id, user_id)
+        # set_user_data(telegram_id, 'last_sent_id', new_last_sent_id)
+
+
+send_text_to_users()
 
 
 # Создаём экземпляры классов Bot и Dispatcher, к боту привязываем токен,
@@ -422,5 +415,5 @@ async def help_handler(message: types.Message):
 
 
 # Запускаем бота:
-if __name__ == '__main__':
-    executor.start_polling(dp)
+# if __name__ == '__main__':
+#     executor.start_polling(dp)
