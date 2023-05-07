@@ -217,8 +217,7 @@ def add_user_if_none(telegram_id, telegram_name):
 
 
 def set_user_data(user_id, user_data_type, user_data):
-    """Writes the data into the `users` table; updates the specific field in this table,
-    depending on the `user_data_type` parameter.
+    """Updates user data in the DB, depending on the `user_data_type` parameter.
 
     :param user_id: the id of the user in the DB table
     :type user_id: str or int
@@ -230,20 +229,29 @@ def set_user_data(user_id, user_data_type, user_data):
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
-    update_query = f"UPDATE `users` SET `{user_data_type}` = %s WHERE `id` = %s"
+    error = False
+    update_query = f"UPDATE `users` SET `{user_data_type}` = '{user_data}' " \
+                   f"WHERE `id` = '{user_id}'"
+    logging.info(f'Trying to update the `{user_data_type}` field with `{user_data}` '
+                 f'value for the user `{user_id}`...')
+    connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
-            logging.info(f'Trying to update the `{user_data_type}` field with `{user_data}` value '
-                         f'for the user `{user_id}` in the `users` DB table.')
-            cursor.execute(update_query, (user_data, user_id))
+            cursor.execute(update_query)
             connection.commit()
-            logging.info(f'An attempt to update the `{user_data_type}` field with `{user_data}` value '
-                         f'for the user `{user_id}` in the `users` DB table has been successful.')
-            return True
+            logging.info(f'An attempt to update the `{user_data_type}` field with `{user_data}` '
+                         f'value for user `{user_id}` has been successful.')
         except Exception as e:
-            logging.error(f'An attempt to update the `{user_data_type}` field with `{user_data}` value '
-                          f'for the user `{user_id}` in the `users` DB table failed: {e}', exc_info=True)
-            return False
+            logging.error(f'An attempt to update the `{user_data_type}` field with `{user_data}` '
+                          f'value for user `{user_id}` failed: {e}', exc_info=True)
+            error = True
+        finally:
+            connection.close()
+            logging.info(f'Connection to the database closed.')
+            if error:
+                return False
+            else:
+                return True
 
 
 # TEMPORARY CODE START
