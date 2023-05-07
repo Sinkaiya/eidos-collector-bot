@@ -38,7 +38,7 @@ def connect_to_db(host, port, user, password, database):
     """
     connection = None
     for attempt in range(1, 11):
-        logging.info(f'Trying to connect to the database. Attempt {attempt} of 10...')
+        logging.info(f'Connecting to the database. Attempt {attempt} of 10...')
 
         try:
             connection = connect(host=host,
@@ -70,12 +70,12 @@ def get_text(table_name, text_id):
     :rtype: str or bool (if something went wrong)
     """
     text = None
-    query = f"SELECT `text` FROM `{table_name}` WHERE `id` = %s;"
+    query = f"SELECT `text` FROM `{table_name}` WHERE `id` = {text_id}"
     logging.info(f'Trying to acquire text piece # {text_id} from the `{table_name}` table.')
     connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
-            cursor.execute(query, [text_id])
+            cursor.execute(query)
             result = cursor.fetchall()
             for row in result:
                 text = "".join(row[0].decode("utf8"))
@@ -93,57 +93,58 @@ def get_text(table_name, text_id):
                 return False
 
 
-def get_user_data(user_id):
-    """Gets the user data from DB.
+def get_user_data(telegram_id):
+    """Gets the user data from DB: telegram_name, user_table_name and last_sent_id.
 
-    :param user_id: the id of the user in the DB table
-    :type user_id: str or int
+    :param telegram_id: the id of the user in the DB table
+    :type telegram_id: str or int
 
-    :return: the user's telegram id,
-             the users personal DB table name,
-             the id of the last text piece that has been sent to user
+    :return: user's telegram name,
+             user's personal DB table name,
+             id of the last text piece that has been sent to user
              or False if there was an error
     :rtype: (str, str, str) or bool (if something went wrong)
     """
-    query = f"SELECT `telegram_id`, `telegram_name`, `last_sent_id`, `user_table_name` " \
-            f"FROM `users` WHERE telegram_id = {user_id};"
-    logging.info(f'Trying to acquire data for user {user_id}...')
+    query = f"SELECT `chat_id`, `telegram_name`, `user_table_name`, `last_sent_id` " \
+            f"FROM `users` WHERE telegram_id = {telegram_id};"
+    logging.info(f'Trying to acquire data for user {telegram_id}...')
     connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(query)
             result = cursor.fetchall()
-            telegram_id = result[0][0]
+            chat_id = result[0][0]
             telegram_name = result[0][1]
-            last_chapter_sent = result[0][2]
-            on_hold = result[0][3]
-            logging.info(f'The data for user {user_id} successfully acquired.')
+            user_table_name = result[0][2]
+            last_chapter_sent = result[0][3]
+            logging.info(f'The data for user {telegram_id} successfully acquired.')
         except Exception as e:
-            logging.error(f'An attempt to acquire data for user # {user_id} '
+            logging.error(f'An attempt to acquire data for user # {telegram_id} '
                           f'failed: {e}', exc_info=True)
         finally:
             connection.close()
             logging.info(f'Connection to the database closed.')
             if result:
-                return telegram_id, telegram_name, last_chapter_sent, on_hold
+                return chat_id, telegram_name, user_table_name, last_chapter_sent
             else:
                 return False
 
 
-def create_user_table(telegram_id, telegram_name):
-    """Creates a special table in the DB which belongs to the specific user and contains
-    this user's ideas.
+def create_user_table(telegram_id, telegram_name, table_name):
+    """Creates a special table in the DB which belongs to specific user
+     and contains this user's ideas.
 
-    :param telegram_id: unique numeric identifier of user's telegram account
+    :param telegram_id: unique numeric id of user's telegram account
     :type telegram_id: int
     :param telegram_name: user's telegram name
     :type telegram_name: str
+    :param table_name: name of the user's table we are about to create
+    :type table_name: str
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
     error = False
-    table_name = str(telegram_id)
     create_query = f"CREATE TABLE IF NOT EXISTS `{table_name}` (`id` INT PRIMARY KEY " \
                    f"AUTO_INCREMENT NOT NULL, `text` TEXT NOT NULL) ENGINE=InnoDB;"
     logging.info(f'Creating a personal table for user {telegram_id} ({telegram_name})...')
@@ -167,19 +168,21 @@ def create_user_table(telegram_id, telegram_name):
                 return True
 
 
-def add_user_if_none(telegram_id, telegram_name):
+def add_user_if_none(telegram_id, chat_id, telegram_name):
     """Checks if a user with such telegram id is present in the DB already,
         and creates a new entry if there is no such user in the DB.
 
     :param telegram_id: unique numeric identifier of user's telegram account
     :type telegram_id: int
+    :param chat_id: unique numeric id of this bot's chat with the specifir user
+    :type chat_id: int
     :param telegram_name: the user's telegram name (the one that starts with @)
     :type telegram_name: str
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
-    search_query = f"SELECT `id` FROM `users` WHERE `telegram_id` = {telegram_id};"
+    search_query = f"SELECT * FROM `users` WHERE `telegram_id` = {telegram_id};"
     logging.info(f'Checking if the user {telegram_id} ({telegram_name}) is present '
                  f'in the DB already.')
     connection = connect_to_db(**db_config)
@@ -192,14 +195,15 @@ def add_user_if_none(telegram_id, telegram_name):
         if cursor.fetchone() is None:
             logging.info(f'Search for user {telegram_id} ({telegram_name}) performed. '
                          f'User not found. Adding user...')
-            insert_query = f"INSERT INTO `users` (`telegram_id`, `telegram_name`, " \
+            table_name = 'db' + str(telegram_id)
+            insert_query = f"INSERT INTO `users` (`telegram_id`, `chat_id`, `telegram_name`, " \
                            f"`last_sent_id`, `user_table_name`) VALUES ('{telegram_id}', " \
-                           f"'{telegram_name}', '0', '{telegram_id}');"
+                           f"'{chat_id}', '{telegram_name}', 0, '{table_name}');"
             try:
                 cursor.execute(insert_query)
                 connection.commit()
                 logging.info(f'User {telegram_id} ({telegram_name}) added to the DB.')
-                create_user_table(telegram_id, telegram_name)
+                create_user_table(telegram_id, telegram_name, table_name)
                 connection.close()
                 logging.info(f'Connection to the database closed.')
                 return True
@@ -216,13 +220,13 @@ def add_user_if_none(telegram_id, telegram_name):
             logging.info(f'Connection to the database closed.')
 
 
-def set_user_data(user_id, user_data_type, user_data):
+def set_user_data(telegram_id, user_data_field, user_data):
     """Updates user data in the DB, depending on the `user_data_type` parameter.
 
-    :param user_id: the id of the user in the DB table
-    :type user_id: str or int
-    :param user_data_type: the field of the `users` table that should be updated
-    :type user_data_type: str
+    :param telegram_id: the id of the user in the DB table
+    :type telegram_id: str or int
+    :param user_data_field: the field of the `users` table that should be updated
+    :type user_data_field: str
     :param user_data: the data that should be written into the specific field of the `users` table
     :type user_data: str
 
@@ -230,20 +234,20 @@ def set_user_data(user_id, user_data_type, user_data):
     :rtype: bool
     """
     error = False
-    update_query = f"UPDATE `users` SET `{user_data_type}` = '{user_data}' " \
-                   f"WHERE `id` = '{user_id}'"
-    logging.info(f'Trying to update the `{user_data_type}` field with `{user_data}` '
-                 f'value for the user `{user_id}`...')
+    update_query = f"UPDATE `users` SET `{user_data_field}` = '{user_data}' " \
+                   f"WHERE `telegram_id` = '{telegram_id}'"
+    logging.info(f'Trying to update the `{user_data_field}` field with `{user_data}` '
+                 f'value for the user `{telegram_id}`...')
     connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(update_query)
             connection.commit()
-            logging.info(f'An attempt to update the `{user_data_type}` field with `{user_data}` '
-                         f'value for user `{user_id}` has been successful.')
+            logging.info(f'An attempt to update the `{user_data_field}` field with `{user_data}` '
+                         f'value for user `{telegram_id}` has been successful.')
         except Exception as e:
-            logging.error(f'An attempt to update the `{user_data_type}` field with `{user_data}` '
-                          f'value for user `{user_id}` failed: {e}', exc_info=True)
+            logging.error(f'An attempt to update the `{user_data_field}` field with `{user_data}` '
+                          f'value for user `{telegram_id}` failed: {e}', exc_info=True)
             error = True
         finally:
             connection.close()
@@ -285,17 +289,57 @@ def db_table_rows_count(table_name):
                 return False
 
 
+def get_telegram_ids(table_name):
+    """Collects telegram ids of active users and creates a list with them.
+
+    :param table_name: name of the DB table we are getting data from
+    :type table_name: str
+
+    :return: a list with telegram ids or False if there was an error
+    :rtype: [int] or bool (if something went wrong)
+    """
+    telegram_ids_list = []
+    query = f"SELECT `telegram_id` FROM `{table_name}`;"
+    logging.info(f'Collecting telegram ids...')
+    connection = connect_to_db(**db_config)
+    with connection.cursor() as cursor:
+        try:
+            cursor.execute(query)
+            result = cursor.fetchall()
+            # print(result)
+            for entry in result:
+                telegram_ids_list.append(entry[0])
+            logging.info(f'Telegram ids collected successfully.')
+        except Exception as e:
+            logging.error(f'An attempt to collect telegram ids failed: {e}', exc_info=True)
+        finally:
+            connection.close()
+            logging.info(f'Connection to the database closed.')
+            if result:
+                return telegram_ids_list
+            else:
+                return False
+
+
 def send_text_from_db_to_users():
     """Iterates over the list of users and sends each other of them his own piece of text,
-     according to the user's data.
+     according to the user's 'last_sent_id' :parameter.
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
-    table_for_count = 'users'
-    users_count = db_table_rows_count(table_for_count)
-    # TODO Здесь проблема: если пользователь был удалён из БД, в нумерации образуется дырка,
-    #  и мы получаем index out of range. Нужно это как-то предотвратить.
+    users_count = db_table_rows_count('users')
+    # If users_count > 1000, we should add some logic which processes users in batches
+    # to save memory. But for now, since the quantity of users is not too large,
+    # we can consider it as a feature to add in the future. :)
+
+    # get_user_data - может, сразу создавать словарь для пользователя? С его id? Like
+    # [1: {'telegram_id': 171717, 'table_name': '171717', 'last_sent_id': '7'}]
+    # NOPE!
+
+    # Creating a list with telegram_ids
+
+
 
     # Получив количество пользователей, перебираем каждого из них.
     for user_id in range(1, users_count + 1):
