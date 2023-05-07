@@ -220,34 +220,39 @@ def add_user_if_none(telegram_id, chat_id, telegram_name):
             logging.info(f'Connection to the database closed.')
 
 
-def set_user_data(telegram_id, user_data_field, user_data):
-    """Updates user data in the DB, depending on the `user_data_type` parameter.
+def update_db(table_name, data_field, data, telegram_id=None):
+    """Updates the data in the DB, depending on the `data_field` parameter.
 
+    :param table_name: name of the DB table we are about to update
+    :type table_name: str
     :param telegram_id: the id of the user in the DB table
     :type telegram_id: str or int
-    :param user_data_field: the field of the `users` table that should be updated
-    :type user_data_field: str
-    :param user_data: the data that should be written into the specific field of the `users` table
-    :type user_data: str
+    :param data_field: field of the table that should be updated
+    :type data_field: str
+    :param data: the data that should be written into the specific field of the table
+    :type data: str
 
     :return: True of False, depending on whether everything worked correctly
     :rtype: bool
     """
     error = False
-    update_query = f"UPDATE `users` SET `{user_data_field}` = '{user_data}' " \
-                   f"WHERE `telegram_id` = '{telegram_id}'"
-    logging.info(f'Trying to update the `{user_data_field}` field with `{user_data}` '
-                 f'value for the user `{telegram_id}`...')
+    if table_name == 'users':
+        update_query = f"UPDATE `{table_name}` SET `{data_field}` = '{data}' " \
+                       f"WHERE `telegram_id` = '{telegram_id}'"
+    else:
+        update_query = f"INSERT INTO `{table_name}` (`{data_field}`) VALUES ('{data}');"
+    logging.info(f'Trying to update the `{data_field}` field of `{table_name}` table '
+                 f'with `{data}` value...')
     connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
             cursor.execute(update_query)
             connection.commit()
-            logging.info(f'An attempt to update the `{user_data_field}` field with `{user_data}` '
-                         f'value for user `{telegram_id}` has been successful.')
+            logging.info(f'An attempt to update the `{data_field}` field of `{table_name}` '
+                         f'table with `{data}` value has been successful.')
         except Exception as e:
-            logging.error(f'An attempt to update the `{user_data_field}` field with `{user_data}` '
-                          f'value for user `{telegram_id}` failed: {e}', exc_info=True)
+            logging.error(f'An attempt to update the `{data_field}` field of `{table_name}` '
+                          f'table with `{data}` value failed: {e}', exc_info=True)
             error = True
         finally:
             connection.close()
@@ -349,7 +354,7 @@ def send_text_to_users():
             new_last_sent_id = 1
 
         new_text_to_send = get_text(user_table_name, new_last_sent_id)
-        # bot.send_message(telegram_id, new_text_to_send)
+        bot.send_message(telegram_id, new_text_to_send)
 
         # Убеждаемся, что сообщение доставлено. (КАК?)
         # Если сообщение не доставлено - пытаемся отправить ещё раз.
@@ -357,10 +362,10 @@ def send_text_to_users():
         #  пользователю и отправить мне уведомление)
 
         # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
-        # set_user_data(telegram_id, 'last_sent_id', new_last_sent_id)
+        update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
-send_text_to_users()
+# send_text_to_users()
 
 
 # Создаём экземпляры классов Bot и Dispatcher, к боту привязываем токен,
@@ -388,32 +393,40 @@ async def message_handler(message: types.Message):
     # Обрабатываем нового пользователя и добавляем его в БД.
     elif message.text.lower() == '/join':
         # Получаем telegram id:
-        telegram_id = message.from_user.username
+        telegram_id = message.from_user.id
+        chat_id = message.chat.id
+        telegram_name = message.from_user.username
         # Функция add_user проверяет, есть ли такой telegram id в нашей БД,
         # и если нет - добавляет его туда.
-        add_user_if_none(telegram_id)
+        add_user_if_none(telegram_id, chat_id, telegram_name)
         # Теперь нужно решить, как будут отправляться послания.
         # Первое послание должно отправляться сразу, а последующие - в восемь часов утра.
         # Полагаю, достаточно сделать функцию с условной логикой, которая проверяет номер
         # послания, и если он первый - отправляет сразу, а иначе - делает это в восемь утра.
-        # send_text_from_db_to_users()  # TEMPORARILY DISABLED
-        test_message = f'This is a test message, {telegram_id}'
-        await bot.send_message(telegram_id, test_message)
+        # send_text_to_users()
+        # test_message = new_text
+        # await bot.send_message(telegram_id, test_message)
 
     # msg = 'a message for user'
     # # await bot.send_message(user_id, msg.format(user_name))
 
 
-@dp.message_handler(commands=['help'])
+@dp.message_handler(commands=['add'])
 async def help_handler(message: types.Message):
     # Получаем telegram id:
-    telegram_id = message.from_user.username
+    telegram_id = message.from_user.id
     # Проверяем, есть ли такой telegram id в нашей БД, и если нет - добавляем.
     # TODO По идее, нужно это делать после подтверждения от пользователя, я полагаю.
     #  После того, как он нажмёт кнопочку "Прислать первое письмо" или что-то типа того.
-    add_user_if_none(telegram_id)
+    # await bot.send_message(message.from_user.id, message.text)
+    await bot.get(message.text)
+    table_name = 'db' + str(telegram_id)
+    data_field = 'text'
+    data = message.text
+    update_db(table_name, data_field, data, telegram_id)
+
 
 
 # Запускаем бота:
-# if __name__ == '__main__':
-#     executor.start_polling(dp)
+if __name__ == '__main__':
+    executor.start_polling(dp)
