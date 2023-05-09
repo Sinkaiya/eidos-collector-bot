@@ -10,15 +10,31 @@ logging.basicConfig(level=logging.INFO,
                     filemode="a",
                     format="%(asctime)s %(levelname)s %(message)s")
 
-while True:
-    logging.info(f'Trying to connect to the database...')
-    connection = connect(host="127.0.0.1",
-                         port=3306,
-                         user=config.get('mysql', 'user'),
-                         password=config.get('mysql', 'password'),
-                         database="vda")
+db_config = {'host': "127.0.0.1",
+             'port': 3306,
+             'user': config.get('mysql', 'user'),
+             'password': config.get('mysql', 'password'),
+             'database': "vda"}
+
+bot_token = config.get('telegram', 'token')
+bot = Bot(bot_token)
+dp = Dispatcher(bot)
 
 
+@dp.message_handler(commands="answer")
+async def cmd_answer(message: types.Message):
+    await message.answer("This is a simple reply.")
 
 
-connection.close()
+@dp.message_handler(commands="reply")
+async def cmd_reply(message: types.Message):
+    await message.reply("This is an answer with quoted reply.")
+
+
+@dp.message_handler(commands="dice")
+async def cmd_dice(message: types.Message):
+    await message.answer_dice(emoji="🎲")
+
+
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True)
