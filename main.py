@@ -109,7 +109,7 @@ def get_user_data(telegram_id):
              or False if there was an error
     :rtype: (str, str, str) or bool (if something went wrong)
     """
-    query = f"SELECT `chat_id`, `telegram_name`, `user_table_name`, `last_sent_id` " \
+    query = f"SELECT `telegram_id`, `telegram_name`, `user_table_name`, `last_sent_id` " \
             f"FROM `users` WHERE telegram_id = {telegram_id};"
     logging.info(f'Trying to acquire data for user {telegram_id}...')
     connection = connect_to_db(**db_config)
@@ -117,7 +117,7 @@ def get_user_data(telegram_id):
         try:
             cursor.execute(query)
             result = cursor.fetchall()
-            chat_id = result[0][0]
+            telegram_id = result[0][0]
             telegram_name = result[0][1]
             user_table_name = result[0][2]
             last_chapter_sent = result[0][3]
@@ -129,7 +129,7 @@ def get_user_data(telegram_id):
             connection.close()
             logging.info(f'Connection to the database closed.')
             if result:
-                return chat_id, telegram_name, user_table_name, last_chapter_sent
+                return telegram_id, telegram_name, user_table_name, last_chapter_sent
             else:
                 return False
 
@@ -172,14 +172,12 @@ def create_user_table(telegram_id, telegram_name, table_name):
                 return True
 
 
-def add_user_if_none(telegram_id, chat_id, telegram_name):
+def add_user_if_none(telegram_id, telegram_name):
     """Checks if a user with such telegram id is present in the DB already,
         and creates a new entry if there is no such user in the DB.
 
     :param telegram_id: unique numeric identifier of user's telegram account
     :type telegram_id: int
-    :param chat_id: unique numeric id of this bot's chat with the specifir user
-    :type chat_id: int
     :param telegram_name: the user's telegram name (the one that starts with @)
     :type telegram_name: str
 
@@ -190,6 +188,7 @@ def add_user_if_none(telegram_id, chat_id, telegram_name):
     logging.info(f'Checking if the user {telegram_id} ({telegram_name}) is present '
                  f'in the DB already.')
     connection = connect_to_db(**db_config)
+    table_name = 'db' + str(telegram_id)
     with connection.cursor() as cursor:
         try:
             cursor.execute(search_query)
@@ -199,10 +198,9 @@ def add_user_if_none(telegram_id, chat_id, telegram_name):
         if cursor.fetchone() is None:
             logging.info(f'Search for user {telegram_id} ({telegram_name}) performed. '
                          f'User not found. Adding user...')
-            table_name = 'db' + str(telegram_id)
-            insert_query = f"INSERT INTO `users` (`telegram_id`, `chat_id`, `telegram_name`, " \
+            insert_query = f"INSERT INTO `users` (`telegram_id`, `telegram_name`, " \
                            f"`last_sent_id`, `user_table_name`) VALUES ('{telegram_id}', " \
-                           f"'{chat_id}', '{telegram_name}', 0, '{table_name}');"
+                           f"'{telegram_name}', 0, '{table_name}');"
             try:
                 cursor.execute(insert_query)
                 connection.commit()
@@ -210,7 +208,7 @@ def add_user_if_none(telegram_id, chat_id, telegram_name):
                 create_user_table(telegram_id, telegram_name, table_name)
                 connection.close()
                 logging.info(f'Connection to the database closed.')
-                return True
+                return 'db_created'
             except Exception as e:
                 logging.error(f'An attempt to add user {telegram_id} ({telegram_name}) '
                               f'to the DB failed: {e}', exc_info=True)
@@ -219,9 +217,18 @@ def add_user_if_none(telegram_id, chat_id, telegram_name):
                 return False
         else:
             logging.info(f'User {telegram_id} ({telegram_name}) is in the database '
-                         f'already. No actions is needed')
+                         f'already. Checking if the user has a DB...')
+            search_query = f"CHECK TABLE LIKE `{table_name}`;"
+            try:
+                cursor.execute(search_query)
+            except Exception as e:
+                logging.error(f'An attempt to check if the user {telegram_id} ({telegram_name}) '
+                              f'is present in the DB already failed: {e}', exc_info=True)
+            if cursor.fetchone() is None:
+                create_user_table(telegram_id, telegram_name, table_name)
             connection.close()
             logging.info(f'Connection to the database closed.')
+            return 'db_exists'
 
 
 def update_db(table_name, data_field, data, telegram_id=None):
@@ -347,7 +354,7 @@ def send_text_to_users():
     current_telegram_ids_list = get_telegram_ids(current_table)
 
     for telegram_id in current_telegram_ids_list:
-        chat_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
+        telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
 
         # Setting an id of text which should be sent to current user.
         # Checking if this id is not more than total count of texts
@@ -369,62 +376,8 @@ def send_text_to_users():
         update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
-# Создаём экземпляры классов Bot и Dispatcher, к боту привязываем токен,
-# а к диспетчеру - самого бота.
 bot = Bot(token=bot_token)
 dp = Dispatcher(bot=bot, storage=MemoryStorage())
-
-
-# Декоратор, помогающий получить из диспетчера нужный функционал.
-# В качестве аргумента передаём команды для обраобтки.
-@dp.message_handler(commands=['start', 'join'])
-# Асинхронная функция, обрабатывающая команду /start. Приветствует пользователя
-# и обрабатывает сообщение, которое он отправляет в ответ.
-async def message_handler(message: types.Message):
-    # Приветствуем пользователя и определяем его дальнейшее поведение.
-    if message.text.lower() == '/start':
-        # Получаем полное имя пользователя:
-        user_full_name = message.from_user.full_name
-        # TODO
-        #  - write a proper greeting
-        #  - write the bot description
-        #  - set the bot avatar
-        #  - change the bot's nickname
-        await message.reply(f"{user_full_name}, добро пожаловать в бот.")
-    # Обрабатываем нового пользователя и добавляем его в БД.
-    elif message.text.lower() == '/join':
-        # Получаем telegram id:
-        telegram_id = message.from_user.id
-        chat_id = message.chat.id
-        telegram_name = message.from_user.username
-        # Функция add_user проверяет, есть ли такой telegram id в нашей БД,
-        # и если нет - добавляет его туда.
-        add_user_if_none(telegram_id, chat_id, telegram_name)
-        # Теперь нужно решить, как будут отправляться послания.
-        # Первое послание должно отправляться сразу, а последующие - в восемь часов утра.
-        # Полагаю, достаточно сделать функцию с условной логикой, которая проверяет номер
-        # послания, и если он первый - отправляет сразу, а иначе - делает это в восемь утра.
-        # send_text_to_users()
-        # test_message = new_text
-        # await bot.send_message(telegram_id, test_message)
-
-    # msg = 'a message for user'
-    # # await bot.send_message(user_id, msg.format(user_name))
-
-
-@dp.message_handler(commands=['add'])
-async def help_handler(message: types.Message):
-    # Получаем telegram id:
-    telegram_id = message.from_user.id
-    # Проверяем, есть ли такой telegram id в нашей БД, и если нет - добавляем.
-    # TODO По идее, нужно это делать после подтверждения от пользователя, я полагаю.
-    #  После того, как он нажмёт кнопочку "Прислать первое письмо" или что-то типа того.
-    # await bot.send_message(message.from_user.id, message.text)
-    await bot.get(message.text)
-    table_name = 'db' + str(telegram_id)
-    data_field = 'text'
-    data = message.text
-    update_db(table_name, data_field, data, telegram_id)
 
 
 # Для хранения состояний необходимо создать класс, наследующийся от класса StatesGroup.
@@ -432,14 +385,53 @@ async def help_handler(message: types.Message):
 class GetUserIdea(StatesGroup):
     waiting_for_idea = State()
 
-@dp.message_handler(commands='idea', state='*')
+
+@dp.message_handler(commands=['start'])
+async def cmd_start(message: types.Message):
+    if message.text.lower() == '/start':
+        greeting = 'Добро пожаловать в бот. Выберите кнопочку:'
+        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        buttons = ["О боте", "Начать", "Сохранить идею", "Прислать идею"]
+        keyboard.add(*buttons)
+        await message.answer(greeting, reply_markup=keyboard)
+
+
+@dp.message_handler(Text(equals="О боте"))
+async def cmd_about(message: types.Message):
+    desctription = 'Каждому из нас периодически попадаются на глаза какие-то мысли, идеи, ' \
+                   'соображения, чьи-то высказывания, которые хочется запомнить. Что-то, что ' \
+                   'хотелось бы интегрировать в свою картину мира, в свой набор паттернов ' \
+                   'поведения и отношения, тем самым сделав их более здоровыми, более ' \
+                   'адаптивными, конструктивными и устойчивыми. И этот бот готов помочь ' \
+                   'в этом. Ему можно присылать понравившиеся вам тексты, которые он будет ' \
+                   'складывать в вашу личную базу данных, и раз в день присылать вам один ' \
+                   'из них, напоминая таким образом о содержащейся в нём концепции.\n\n' \
+                   'Чтобы начать пользоваться ботом, нажмите кнопку "Начать": это создаст ' \
+                   'для вас базу данных, в которую вы сможете сохранять свои идеи.'
+    await message.answer(desctription)
+
+
+@dp.message_handler(Text(equals="Начать"))
+async def cmd_join(message: types.Message):
+    telegram_id = message.from_user.id
+    telegram_name = message.from_user.username
+    full_name = message.from_user.full_name
+    user_add_result = add_user_if_none(telegram_id, telegram_name)
+    if user_add_result == 'db_created':
+        await message.answer(f'Приветствуем, {full_name}. Ваша база данных успешно '
+                             f'создана. Приятного использования.')
+    elif user_add_result == 'db_exists':
+        await message.answer(f'Приветствует, {full_name}. Вы уже являетесь пользователем, '
+                             f'база данных у вас уже есть.')
+    else:
+        await message.reply('К сожалению, что-то на сервере пошло не так. '
+                            'Попробуйте, пожалуйста, ещё раз.')
+
+
+@dp.message_handler(Text(equals="Сохранить идею"), state='*')
 async def idea_start(message: types.Message, state: FSMContext):
-    # keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    # buttons = ["Set the bot into idea waiting mode"]
-    # keyboard.add(*buttons)
     # Явно говорим боту встать в состояние waiting_for_idea:
-    # await message.answer('Send me your idea', reply_markup=keyboard)
-    await message.answer('Send me your idea')
+    await message.answer('Ожидаю идею. Её можно скопипастить или переслать прямо сюда.')
     await state.set_state(GetUserIdea.waiting_for_idea.state)
 
 
@@ -453,7 +445,7 @@ async def idea_acquired(message: types.Message, state: FSMContext):
     # Состояние при этом останется тем же, и бот по-прежнему будет ждать
     # выбор блюда.
     if message.content_type != 'text':
-        await message.answer('Please, send me text only.')
+        await message.answer('Бот приемлет только текст. Попробуйте ещё раз.')
         return
 
     # К моменту перехода к этой строке мы уже уверены, что пользователь
@@ -464,7 +456,38 @@ async def idea_acquired(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
     table_name = 'db' + str(telegram_id)
     update_db(table_name, 'text', message.text, telegram_id)
-    await message.answer('Your idea saved to your DB.', reply_markup=types.ReplyKeyboardRemove())
+    await message.answer('Идея успешно сохранена.')
+    await state.finish()
+
+
+# Функция ручной отправки
+@dp.message_handler(Text(equals="Прислать идею"))
+async def cmd_get_idea(message: types.Message):
+    telegram_id = message.from_user.id
+    telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
+    new_last_sent_id = last_sent_id + 1
+    user_table_size = db_table_rows_count(user_table_name)
+    if new_last_sent_id > user_table_size:
+        new_last_sent_id = 1
+    new_text_to_send = get_text(user_table_name, new_last_sent_id)
+    await message.answer(new_text_to_send)
+
+    # Убеждаемся, что сообщение доставлено. (КАК?)
+    # Если сообщение не доставлено - пытаемся отправить ещё раз.
+    # TODO если что-то не шлётся несколько раз - видимо, нужно что-то сделать (сказать
+    #  пользователю и отправить мне уведомление)
+
+    # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
+    update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
+
+
+# Функция автоматической отправки
+# Первое послание должно отправляться сразу, а последующие - в восемь часов утра.
+# Полагаю, достаточно сделать функцию с условной логикой, которая проверяет номер
+# послания, и если он первый - отправляет сразу, а иначе - делает это в восемь утра.
+# send_text_to_users()
+# test_message = new_text
+# await bot.send_message(telegram_id, test_message)
 
 
 if __name__ == '__main__':
