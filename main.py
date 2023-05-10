@@ -1,6 +1,10 @@
 from mysql.connector import connect
 import configparser
 from aiogram import Bot, Dispatcher, executor, types
+from aiogram.dispatcher.filters import Text
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 import logging
 import time
 
@@ -365,13 +369,10 @@ def send_text_to_users():
         update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
-# send_text_to_users()
-
-
 # Создаём экземпляры классов Bot и Dispatcher, к боту привязываем токен,
 # а к диспетчеру - самого бота.
 bot = Bot(token=bot_token)
-dp = Dispatcher(bot=bot)
+dp = Dispatcher(bot=bot, storage=MemoryStorage())
 
 
 # Декоратор, помогающий получить из диспетчера нужный функционал.
@@ -426,7 +427,45 @@ async def help_handler(message: types.Message):
     update_db(table_name, data_field, data, telegram_id)
 
 
+# Для хранения состояний необходимо создать класс, наследующийся от класса StatesGroup.
+# Внутри нужно создать переменные, присвоив им экземпляры класса State.
+class GetUserIdea(StatesGroup):
+    waiting_for_idea = State()
 
-# Запускаем бота:
+@dp.message_handler(commands='idea', state='*')
+async def idea_start(message: types.Message, state: FSMContext):
+    # keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    # buttons = ["Set the bot into idea waiting mode"]
+    # keyboard.add(*buttons)
+    # Явно говорим боту встать в состояние waiting_for_idea:
+    # await message.answer('Send me your idea', reply_markup=keyboard)
+    await message.answer('Send me your idea')
+    await state.set_state(GetUserIdea.waiting_for_idea.state)
+
+
+# Данная функция вызывается только из состояния waiting_for_idea,
+# сохраняет полученный от пользователя текст (если он валидный),
+# и переходит к следующему шагу.
+@dp.message_handler(state=GetUserIdea.waiting_for_idea, content_types=['any'])
+async def idea_acquired(message: types.Message, state: FSMContext):
+    # Если пользователь прислал не текст, а что-то другое,
+    # необходимо сообщить об ошибке и досрочно завершить выполнение функции.
+    # Состояние при этом останется тем же, и бот по-прежнему будет ждать
+    # выбор блюда.
+    if message.content_type != 'text':
+        await message.answer('Please, send me text only.')
+        return
+
+    # К моменту перехода к этой строке мы уже уверены, что пользователь
+    # прислал именно текст, и его можно сохранить в хранилище данных FSM.
+    # Это делается с помощью функции update_data(), сохраняющей текст
+    # под ключом user_idea.
+    await state.update_data(user_idea=message.text)
+    telegram_id = message.from_user.id
+    table_name = 'db' + str(telegram_id)
+    update_db(table_name, 'text', message.text, telegram_id)
+    await message.answer('Your idea saved to your DB.', reply_markup=types.ReplyKeyboardRemove())
+
+
 if __name__ == '__main__':
-    executor.start_polling(dp)
+    executor.start_polling(dp, skip_updates=True)
