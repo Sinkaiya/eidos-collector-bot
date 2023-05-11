@@ -220,15 +220,7 @@ def add_user_if_none(telegram_id, telegram_name):
                 return False
         else:
             logging.info(f'User {telegram_id} ({telegram_name}) is in the database '
-                         f'already. Checking if the user has a DB...')
-            search_query = f"CHECK TABLE LIKE `{table_name}`;"
-            try:
-                cursor.execute(search_query)
-            except Exception as e:
-                logging.error(f'An attempt to check if the user {telegram_id} ({telegram_name}) '
-                              f'is present in the DB already failed: {e}', exc_info=True)
-            if cursor.fetchone() is None:
-                create_user_table(telegram_id, telegram_name, table_name)
+                         f'already. No action is needed.')
             connection.close()
             logging.info(f'Connection to the database closed.')
             return 'db_exists'
@@ -342,10 +334,7 @@ def get_telegram_ids(table_name):
 
 async def send_text_to_users():
     """Iterates over the list of users and sends each other of them his own piece of text,
-     according to the user's 'last_sent_id' :parameter.
-
-    :return: True of False, depending on whether everything worked correctly
-    :rtype: bool
+     according to the user's 'last_sent_id' parameter.
     """
     current_table = 'users'
     # users_count = db_table_rows_count(current_table)
@@ -368,14 +357,8 @@ async def send_text_to_users():
             new_last_sent_id = 1
 
         new_text_to_send = get_text(user_table_name, new_last_sent_id)
-        bot.send_message(telegram_id, new_text_to_send)
+        await bot.send_message(telegram_id, new_text_to_send)
 
-        # Убеждаемся, что сообщение доставлено. (КАК?)
-        # Если сообщение не доставлено - пытаемся отправить ещё раз.
-        # TODO если что-то не шлётся несколько раз - видимо, нужно что-то сделать (сказать
-        #  пользователю и отправить мне уведомление)
-
-        # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
         update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
@@ -383,8 +366,9 @@ bot = Bot(token=bot_token)
 dp = Dispatcher(bot=bot, storage=MemoryStorage())
 
 
-# Для хранения состояний необходимо создать класс, наследующийся от класса StatesGroup.
-# Внутри нужно создать переменные, присвоив им экземпляры класса State.
+# To keep the bot's states we need to create a class which is inherited from
+# the StatesGroup class. The attributes within this class should be the instances
+# of the State() class.
 class GetUserIdea(StatesGroup):
     waiting_for_idea = State()
 
@@ -392,26 +376,16 @@ class GetUserIdea(StatesGroup):
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
     if message.text.lower() == '/start':
-        greeting = 'Добро пожаловать в бот. Выберите кнопочку:'
+        greeting = 'Добро пожаловать в бот.\n\n' \
+                   'Чтобы начать пользоваться - нажмите "Начать".\n\n' \
+                   'Чтобы сохранить понравившуюся идею - нажмите "Сохранить идею".\n\n' \
+                   'По умолчанию бот делает рассылку в 9 часов утра. Чтобы он прислал идею ' \
+                   'прямо сейчас - нажмите "Получить идею".\n\n' \
+                   'Приятного использования. :3'
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
         buttons = ["Начать", "Сохранить идею", "Прислать идею"]
         keyboard.add(*buttons)
         await message.answer(greeting, reply_markup=keyboard)
-
-
-@dp.message_handler(Text(equals="О боте"))
-async def cmd_about(message: types.Message):
-    desctription = 'Каждому из нас периодически попадаются на глаза какие-то мысли, идеи, ' \
-                   'соображения, чьи-то высказывания, которые хочется запомнить. Что-то, что ' \
-                   'хотелось бы интегрировать в свою картину мира, в свой набор паттернов ' \
-                   'поведения и отношения, тем самым сделав их более здоровыми, более ' \
-                   'адаптивными, конструктивными и устойчивыми. И этот бот готов помочь ' \
-                   'в этом. Ему можно присылать понравившиеся вам тексты, которые он будет ' \
-                   'складывать в вашу личную базу данных, и раз в день присылать вам один ' \
-                   'из них, напоминая таким образом о содержащейся в нём концепции.\n\n' \
-                   'Чтобы начать пользоваться ботом, нажмите кнопку "Начать": это создаст ' \
-                   'для вас базу данных, в которую вы сможете сохранять свои идеи.'
-    await message.answer(desctription)
 
 
 @dp.message_handler(Text(equals="Начать"))
@@ -433,28 +407,22 @@ async def cmd_join(message: types.Message):
 
 @dp.message_handler(Text(equals="Сохранить идею"), state='*')
 async def idea_start(message: types.Message, state: FSMContext):
-    # Явно говорим боту встать в состояние waiting_for_idea:
+    # Putting the bot into the 'waiting_for_idea' statement:
     await message.answer('Ожидаю идею. Её можно скопипастить или переслать прямо сюда.')
     await state.set_state(GetUserIdea.waiting_for_idea.state)
 
 
-# Данная функция вызывается только из состояния waiting_for_idea,
-# сохраняет полученный от пользователя текст (если он валидный),
-# и переходит к следующему шагу.
+# This function is being called only from the 'waiting_for_idea' statement.
 @dp.message_handler(state=GetUserIdea.waiting_for_idea, content_types=['any'])
 async def idea_acquired(message: types.Message, state: FSMContext):
-    # Если пользователь прислал не текст, а что-то другое,
-    # необходимо сообщить об ошибке и досрочно завершить выполнение функции.
-    # Состояние при этом останется тем же, и бот по-прежнему будет ждать
-    # выбор блюда.
+    # If the user has sent not text but something weird, we are asking
+    # to send us text only. The state the bot currently in stays the same,
+    # so the bot continues to wait for user's idea.
     if message.content_type != 'text':
         await message.answer('Бот приемлет только текст. Попробуйте ещё раз.')
         return
 
-    # К моменту перехода к этой строке мы уже уверены, что пользователь
-    # прислал именно текст, и его можно сохранить в хранилище данных FSM.
-    # Это делается с помощью функции update_data(), сохраняющей текст
-    # под ключом user_idea.
+    # Saving the idea in the FSM storage via the update_data() method.
     await state.update_data(user_idea=message.text)
     telegram_id = message.from_user.id
     table_name = 'db' + str(telegram_id)
@@ -463,7 +431,6 @@ async def idea_acquired(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-# Функция ручной отправки
 @dp.message_handler(Text(equals="Прислать идею"))
 async def cmd_get_idea(message: types.Message):
     telegram_id = message.from_user.id
@@ -474,37 +441,11 @@ async def cmd_get_idea(message: types.Message):
         new_last_sent_id = 1
     new_text_to_send = get_text(user_table_name, new_last_sent_id)
     await message.answer(new_text_to_send)
-
-    # Убеждаемся, что сообщение доставлено. (КАК?)
-    # Если сообщение не доставлено - пытаемся отправить ещё раз.
-    # TODO если что-то не шлётся несколько раз - видимо, нужно что-то сделать (сказать
-    #  пользователю и отправить мне уведомление)
-
-    # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
-    update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
-
-
-async def noon_print():
-    telegram_id = 64633225
-    telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
-    new_last_sent_id = last_sent_id + 1
-    user_table_size = db_table_rows_count(user_table_name)
-    if new_last_sent_id > user_table_size:
-        new_last_sent_id = 1
-    new_text_to_send = get_text(user_table_name, new_last_sent_id)
-    await bot.send_message(telegram_id, new_text_to_send)
-
-    # Убеждаемся, что сообщение доставлено. (КАК?)
-    # Если сообщение не доставлено - пытаемся отправить ещё раз.
-    # TODO если что-то не шлётся несколько раз - видимо, нужно что-то сделать (сказать
-    #  пользователю и отправить мне уведомление)
-
-    # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
     update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
 async def scheduler():
-    aioschedule.every().day.at("17:19").do(noon_print())
+    aioschedule.every().day.at("09:00").do(send_text_to_users)
     while True:
         await aioschedule.run_pending()
         await asyncio.sleep(1)
