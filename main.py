@@ -1,12 +1,15 @@
-from mysql.connector import connect
+import aioschedule
+import asyncio
 import configparser
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.dispatcher.filters import Text
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
 import logging
 import time
+
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Text
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from mysql.connector import connect
 
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8-sig')
@@ -337,7 +340,7 @@ def get_telegram_ids(table_name):
                 return False
 
 
-def send_text_to_users():
+async def send_text_to_users():
     """Iterates over the list of users and sends each other of them his own piece of text,
      according to the user's 'last_sent_id' :parameter.
 
@@ -391,7 +394,7 @@ async def cmd_start(message: types.Message):
     if message.text.lower() == '/start':
         greeting = 'Добро пожаловать в бот. Выберите кнопочку:'
         keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        buttons = ["О боте", "Начать", "Сохранить идею", "Прислать идею"]
+        buttons = ["Начать", "Сохранить идею", "Прислать идею"]
         keyboard.add(*buttons)
         await message.answer(greeting, reply_markup=keyboard)
 
@@ -481,14 +484,35 @@ async def cmd_get_idea(message: types.Message):
     update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
-# Функция автоматической отправки
-# Первое послание должно отправляться сразу, а последующие - в восемь часов утра.
-# Полагаю, достаточно сделать функцию с условной логикой, которая проверяет номер
-# послания, и если он первый - отправляет сразу, а иначе - делает это в восемь утра.
-# send_text_to_users()
-# test_message = new_text
-# await bot.send_message(telegram_id, test_message)
+async def noon_print():
+    telegram_id = 64633225
+    telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
+    new_last_sent_id = last_sent_id + 1
+    user_table_size = db_table_rows_count(user_table_name)
+    if new_last_sent_id > user_table_size:
+        new_last_sent_id = 1
+    new_text_to_send = get_text(user_table_name, new_last_sent_id)
+    await bot.send_message(telegram_id, new_text_to_send)
+
+    # Убеждаемся, что сообщение доставлено. (КАК?)
+    # Если сообщение не доставлено - пытаемся отправить ещё раз.
+    # TODO если что-то не шлётся несколько раз - видимо, нужно что-то сделать (сказать
+    #  пользователю и отправить мне уведомление)
+
+    # Если сообщение доставлено - обновляем last_chapter_sent для данного пользователя.
+    update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
+
+
+async def scheduler():
+    aioschedule.every().day.at("17:19").do(noon_print())
+    while True:
+        await aioschedule.run_pending()
+        await asyncio.sleep(1)
+
+
+async def on_startup(_):
+    asyncio.create_task(scheduler())
 
 
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
