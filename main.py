@@ -400,8 +400,8 @@ async def cmd_join(message: types.Message):
         await message.answer(f'Приветствуем, {full_name}. Ваша база данных успешно '
                              f'создана. Приятного использования.')
     elif user_add_result == 'db_exists':
-        await message.answer(f'Приветствует, {full_name}. Вы уже являетесь пользователем, '
-                             f'база данных у вас уже есть.')
+        await message.answer(f'Приветствует, {full_name}. База данных у вас уже есть, '
+                             f'нажимать эту кнопку больше нет необходимости. :).')
     else:
         await message.reply('К сожалению, что-то на сервере пошло не так. '
                             'Попробуйте, пожалуйста, ещё раз.')
@@ -451,7 +451,6 @@ async def cmd_get_idea(message: types.Message):
 
 async def scheduler():
     aioschedule.every().day.at("09:00").do(send_text_to_users)
-    # aioschedule.every(10).minutes.do(send_text_to_users)  # TEMPORARY WHILE TESTING
     while True:
         await aioschedule.run_pending()
         await asyncio.sleep(1)
