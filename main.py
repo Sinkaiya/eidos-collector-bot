@@ -15,7 +15,7 @@ config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8-sig')
 bot_token = config.get('telegram', 'token')
 logging.basicConfig(level=logging.INFO,
-                    filename="vda_bot.log",
+                    filename="eidosbot.log",
                     filemode="a",
                     format="%(asctime)s %(levelname)s %(message)s")
 
