@@ -23,7 +23,7 @@ db_config = {'host': "127.0.0.1",
              'port': 3306,
              'user': config.get('mysql', 'user'),
              'password': config.get('mysql', 'password'),
-             'database': "vda"}
+             'database': "eidosbot"}
 
 
 def connect_to_db(host, port, user, password, database):
@@ -352,6 +352,8 @@ async def send_text_to_users():
         # Checking if this id is not more than total count of texts
         # in user's DB, to prevent 'index out of range' error:
         user_table_size = db_table_rows_count(user_table_name)
+        if user_table_size == 0:
+            continue
         new_last_sent_id = last_sent_id + 1
         if new_last_sent_id > user_table_size:
             new_last_sent_id = 1
@@ -437,15 +439,19 @@ async def cmd_get_idea(message: types.Message):
     telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
     new_last_sent_id = last_sent_id + 1
     user_table_size = db_table_rows_count(user_table_name)
-    if new_last_sent_id > user_table_size:
-        new_last_sent_id = 1
-    new_text_to_send = get_text(user_table_name, new_last_sent_id)
-    await message.answer(new_text_to_send)
-    update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
+    if user_table_size == 0:
+        await message.answer('К сожалению, у вас пока ещё нет ни одной идеи.')
+    else:
+        if new_last_sent_id > user_table_size:
+            new_last_sent_id = 1
+        new_text_to_send = get_text(user_table_name, new_last_sent_id)
+        await message.answer(new_text_to_send)
+        update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
 async def scheduler():
-    aioschedule.every().day.at("09:00").do(send_text_to_users)
+    aioschedule.every().day.at("14:13").do(send_text_to_users)
+    # aioschedule.every(10).minutes.do(send_text_to_users)  # TEMPORARY WHILE TESTING
     while True:
         await aioschedule.run_pending()
         await asyncio.sleep(1)
