@@ -450,7 +450,7 @@ async def cmd_get_idea(message: types.Message):
 
 
 async def scheduler():
-    aioschedule.every().day.at("14:13").do(send_text_to_users)
+    aioschedule.every().day.at("09:00").do(send_text_to_users)
     # aioschedule.every(10).minutes.do(send_text_to_users)  # TEMPORARY WHILE TESTING
     while True:
         await aioschedule.run_pending()
