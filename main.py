@@ -375,22 +375,19 @@ class GetUserIdea(StatesGroup):
     waiting_for_idea = State()
 
 
-@dp.message_handler(commands=['start'])
+@dp.message_handler(commands='start')
 async def cmd_start(message: types.Message):
     if message.text.lower() == '/start':
         greeting = 'Добро пожаловать в бот.\n\n' \
-                   'Чтобы начать пользоваться - нажмите "Начать".\n\n' \
+                   'Чтобы начать пользоваться - нажмите "Создать свою базу данных и начать пользоваться".\n\n' \
                    'Чтобы сохранить понравившуюся идею - нажмите "Сохранить идею".\n\n' \
                    'По умолчанию бот делает рассылку в 9 часов утра. Чтобы он прислал идею ' \
-                   'прямо сейчас - нажмите "Получить идею".\n\n' \
+                   'прямо сейчас - нажмите "Попросить бота прислать идею".\n\n' \
                    'Приятного использования. :3'
-        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        buttons = ["Начать", "Сохранить идею", "Прислать идею"]
-        keyboard.add(*buttons)
-        await message.answer(greeting, reply_markup=keyboard)
+        await message.answer(greeting)
 
 
-@dp.message_handler(Text(equals="Начать"))
+@dp.message_handler(commands='join')
 async def cmd_join(message: types.Message):
     telegram_id = message.from_user.id
     telegram_name = message.from_user.username
@@ -407,7 +404,7 @@ async def cmd_join(message: types.Message):
                             'Попробуйте, пожалуйста, ещё раз.')
 
 
-@dp.message_handler(Text(equals="Сохранить идею"), state='*')
+@dp.message_handler(commands='save_idea', state='*')
 async def idea_start(message: types.Message, state: FSMContext):
     # Putting the bot into the 'waiting_for_idea' statement:
     await message.answer('Ожидаю идею. Её можно скопипастить или переслать прямо сюда.')
@@ -433,7 +430,7 @@ async def idea_acquired(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-@dp.message_handler(Text(equals="Прислать идею"))
+@dp.message_handler(commands='get_idea')
 async def cmd_get_idea(message: types.Message):
     telegram_id = message.from_user.id
     telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
