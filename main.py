@@ -14,6 +14,9 @@ from mysql.connector import connect
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8-sig')
 bot_token = config.get('telegram', 'token')
+admin_id = int(config.get('telegram', 'admin_id'))
+
+
 logging.basicConfig(level=logging.INFO,
                     filename="eidosbot.log",
                     filemode="a",
@@ -332,7 +335,7 @@ def get_telegram_ids(table_name):
                 return False
 
 
-async def send_text_to_users():
+async def send_text_to_users(text=None):
     """Iterates over the list of users and sends each other of them his own piece of text,
      according to the user's 'last_sent_id' parameter.
     """
@@ -348,20 +351,23 @@ async def send_text_to_users():
     for telegram_id in current_telegram_ids_list:
         telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
 
-        # Setting an id of text which should be sent to current user.
-        # Checking if this id is not more than total count of texts
-        # in user's DB, to prevent 'index out of range' error:
-        user_table_size = db_table_rows_count(user_table_name)
-        if user_table_size == 0:
-            continue
-        new_last_sent_id = last_sent_id + 1
-        if new_last_sent_id > user_table_size:
-            new_last_sent_id = 1
+        if text:
+            await bot.send_message(telegram_id, text)
+        else:
+            # Setting an id of text which should be sent to current user.
+            # Checking if this id is not more than total count of texts
+            # in user's DB, to prevent 'index out of range' error:
+            user_table_size = db_table_rows_count(user_table_name)
+            if user_table_size == 0:
+                continue
+            new_last_sent_id = last_sent_id + 1
+            if new_last_sent_id > user_table_size:
+                new_last_sent_id = 1
 
-        new_text_to_send = get_text(user_table_name, new_last_sent_id)
-        await bot.send_message(telegram_id, new_text_to_send)
+            new_text_to_send = get_text(user_table_name, new_last_sent_id)
+            await bot.send_message(telegram_id, new_text_to_send)
 
-        update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
+            update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
 
 bot = Bot(token=bot_token)
@@ -373,6 +379,7 @@ dp = Dispatcher(bot=bot, storage=MemoryStorage())
 # of the State() class.
 class GetUserIdea(StatesGroup):
     waiting_for_idea = State()
+    waiting_for_broadcast = State()
 
 
 @dp.message_handler(commands='start')
@@ -410,13 +417,39 @@ async def idea_acquired(message: types.Message, state: FSMContext):
     if message.content_type != 'text':
         await message.answer('Бот приемлет только текст. Попробуйте ещё раз.')
         return
-
     # Saving the idea in the FSM storage via the update_data() method.
     await state.update_data(user_idea=message.text)
     telegram_id = message.from_user.id
     table_name = 'db' + str(telegram_id)
     update_db(table_name, 'text', message.text, telegram_id)
     await message.answer('Идея успешно сохранена.')
+    await state.finish()
+
+
+@dp.message_handler(commands='broadcast', state='*')
+async def idea_start(message: types.Message, state: FSMContext):
+    telegram_id = message.from_user.id
+    if telegram_id == admin_id:
+        await message.answer('Ожидаю широковещательное сообщение.')
+        await state.set_state(GetUserIdea.waiting_for_broadcast.state)
+    else:
+        await message.answer('Ты не админ, тебе нельзя. >:3')
+
+
+# This function is being called only from the 'waiting_for_idea' statement.
+@dp.message_handler(state=GetUserIdea.waiting_for_broadcast, content_types=['any'])
+async def idea_acquired(message: types.Message, state: FSMContext):
+    # If the user has sent not text but something weird, we are asking
+    # to send us text only. The state the bot currently in stays the same,
+    # so the bot continues to wait for user's idea.
+    if message.content_type != 'text':
+        await message.answer('Широковещательное сообщение должно быть текстовым. '
+                             'Попробуй ещё раз.')
+        return
+    # Saving the idea in the FSM storage via the update_data() method.
+    await state.update_data(broadcast_message=message.text)
+    await send_text_to_users(message.text)
+    await message.answer('Широковещательное оповещение успешно разослано.')
     await state.finish()
 
 
