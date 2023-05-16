@@ -9,6 +9,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
+import aiogram.utils.markdown as fmt
 from mysql.connector import connect
 
 config = configparser.ConfigParser()
@@ -89,6 +90,10 @@ def get_text(table_name, text_id):
             result = cursor.fetchall()
             for row in result:
                 text = "".join(row[0].decode("utf8"))
+            if "\\'" in text:
+                text = text.replace("'", "'")
+            if "\\`" in text:
+                text = text.replace("`", "`")
             logging.info(f'The text piece # {text_id} from the `{table_name}` table '
                          f'successfully acquired.')
         except Exception as e:
@@ -245,6 +250,10 @@ def update_db(table_name, data_field, data, telegram_id=None):
     :rtype: bool
     """
     error = False
+    if "'" in str(data):
+        data = data.replace("'", "\\'")
+    if "`" in str(data):
+        data = data.replace("`", "\\`")
     if table_name == 'users':
         update_query = f"UPDATE `{table_name}` SET `{data_field}` = '{data}' " \
                        f"WHERE `telegram_id` = '{telegram_id}'"
@@ -386,7 +395,6 @@ class GetUserIdea(StatesGroup):
 async def cmd_start(message: types.Message):
     if message.text.lower() == '/start':
         greeting = 'Добро пожаловать в бот.\n\n' \
-                   'Чтобы начать пользоваться - нажмите "Создать свою базу данных и начать пользоваться".\n\n' \
                    'Чтобы сохранить понравившуюся идею - нажмите "Сохранить идею".\n\n' \
                    'По умолчанию бот делает рассылку в 9 часов утра. Чтобы он прислал идею ' \
                    'прямо сейчас - нажмите "Попросить бота прислать идею".\n\n' \
@@ -401,10 +409,11 @@ async def idea_start(message: types.Message, state: FSMContext):
     full_name = message.from_user.full_name
     user_add_result = add_user_if_none(telegram_id, telegram_name)
     if user_add_result == 'db_created':
-        await message.answer(f'Приветствуем, {full_name}. Ваша база данных успешно '
-                             f'создана. Приятного использования.')
+        await message.answer(f'Приветствуем, {fmt.hbold(full_name)}. Ваша база данных успешно '
+                             f'создана. Приятного использования.', parse_mode=types.ParseMode.HTML)
     # Putting the bot into the 'waiting_for_idea' statement:
-    await message.answer('Ожидаю идею. Её можно скопипастить или переслать прямо сюда.')
+    await message.answer('Ожидаю идею. Её можно скопипастить или переслать прямо сюда.',
+                         reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(GetUserIdea.waiting_for_idea.state)
 
 
@@ -415,14 +424,19 @@ async def idea_acquired(message: types.Message, state: FSMContext):
     # to send us text only. The state the bot currently in stays the same,
     # so the bot continues to wait for user's idea.
     if message.content_type != 'text':
-        await message.answer('Бот приемлет только текст. Попробуйте ещё раз.')
+        await message.answer('Бот приемлет только текст. Попробуйте ещё раз.',
+                             reply_markup=types.ReplyKeyboardRemove())
         return
     # Saving the idea in the FSM storage via the update_data() method.
     await state.update_data(user_idea=message.text)
+    user_idea = message.text
     telegram_id = message.from_user.id
     table_name = 'db' + str(telegram_id)
-    update_db(table_name, 'text', message.text, telegram_id)
-    await message.answer('Идея успешно сохранена.')
+    db_update_result = update_db(table_name, 'text', user_idea, telegram_id)
+    if db_update_result:
+        await message.answer('Идея успешно сохранена.')
+    else:
+        await message.answer('Идея не сохранилась, что-то пошло не так.')
     await state.finish()
 
 
@@ -460,8 +474,9 @@ async def cmd_get_idea(message: types.Message):
     full_name = message.from_user.full_name
     user_add_result = add_user_if_none(telegram_id, telegram_name)
     if user_add_result == 'db_created':
-        await message.answer(f'Приветствуем, {full_name}. Ваша база данных успешно '
-                             f'создана, но идей, которые можно было бы прислать, пока нет.')
+        await message.answer(f'Приветствуем, {fmt.hbold(full_name)}. Ваша база данных успешно '
+                             f'создана, но идей, которые можно было бы прислать, пока нет.',
+                             parse_mode=types.ParseMode.HTML)
         return True
     telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
     user_table_size = db_table_rows_count(user_table_name)
