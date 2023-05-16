@@ -387,8 +387,8 @@ async def cmd_start(message: types.Message):
         await message.answer(greeting)
 
 
-@dp.message_handler(commands='join')
-async def cmd_join(message: types.Message):
+@dp.message_handler(commands='save_idea', state='*')
+async def idea_start(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
     telegram_name = message.from_user.username
     full_name = message.from_user.full_name
@@ -396,16 +396,6 @@ async def cmd_join(message: types.Message):
     if user_add_result == 'db_created':
         await message.answer(f'Приветствуем, {full_name}. Ваша база данных успешно '
                              f'создана. Приятного использования.')
-    elif user_add_result == 'db_exists':
-        await message.answer(f'Приветствует, {full_name}. База данных у вас уже есть, '
-                             f'нажимать эту кнопку больше нет необходимости. :).')
-    else:
-        await message.reply('К сожалению, что-то на сервере пошло не так. '
-                            'Попробуйте, пожалуйста, ещё раз.')
-
-
-@dp.message_handler(commands='save_idea', state='*')
-async def idea_start(message: types.Message, state: FSMContext):
     # Putting the bot into the 'waiting_for_idea' statement:
     await message.answer('Ожидаю идею. Её можно скопипастить или переслать прямо сюда.')
     await state.set_state(GetUserIdea.waiting_for_idea.state)
@@ -433,12 +423,19 @@ async def idea_acquired(message: types.Message, state: FSMContext):
 @dp.message_handler(commands='get_idea')
 async def cmd_get_idea(message: types.Message):
     telegram_id = message.from_user.id
+    telegram_name = message.from_user.username
+    full_name = message.from_user.full_name
+    user_add_result = add_user_if_none(telegram_id, telegram_name)
+    if user_add_result == 'db_created':
+        await message.answer(f'Приветствуем, {full_name}. Ваша база данных успешно '
+                             f'создана, но идей, которые можно было бы прислать, пока нет.')
+        return True
     telegram_id, telegram_name, user_table_name, last_sent_id = get_user_data(telegram_id)
-    new_last_sent_id = last_sent_id + 1
     user_table_size = db_table_rows_count(user_table_name)
     if user_table_size == 0:
         await message.answer('К сожалению, у вас пока ещё нет ни одной идеи.')
     else:
+        new_last_sent_id = last_sent_id + 1
         if new_last_sent_id > user_table_size:
             new_last_sent_id = 1
         new_text_to_send = get_text(user_table_name, new_last_sent_id)
