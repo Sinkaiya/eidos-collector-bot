@@ -17,7 +17,6 @@ config.read('config.ini', encoding='utf-8-sig')
 bot_token = config.get('telegram', 'token')
 admin_id = int(config.get('telegram', 'admin_id'))
 
-
 logging.basicConfig(level=logging.INFO,
                     filename="eidosbot.log",
                     filemode="a",
@@ -264,10 +263,19 @@ def update_db(table_name, data_field, data, telegram_id=None):
     connection = connect_to_db(**db_config)
     with connection.cursor() as cursor:
         try:
-            cursor.execute(update_query)
-            connection.commit()
-            logging.info(f'An attempt to update the `{data_field}` field of `{table_name}` '
-                         f'table with `{data}` value has been successful.')
+            double_check_query = f"SELECT * FROM `{table_name}` WHERE `{data_field}` = '{data}';"
+            logging.info(f'Checking if {data} is present in the {table_name} already...')
+            cursor.execute(double_check_query)
+            result = cursor.fetchall()
+            if result:
+                logging.info(f'{data} is present in the {table_name} already.')
+                return 'there_is_double'
+            else:
+                cursor.execute(update_query)
+                connection.commit()
+                logging.info(f'An attempt to update the `{data_field}` field of `{table_name}` '
+                             f'table with `{data}` value has been successful.')
+                return 'idea_saved'
         except Exception as e:
             logging.error(f'An attempt to update the `{data_field}` field of `{table_name}` '
                           f'table with `{data}` value failed: {e}', exc_info=True)
@@ -277,8 +285,6 @@ def update_db(table_name, data_field, data, telegram_id=None):
             logging.info(f'Connection to the database closed.')
             if error:
                 return False
-            else:
-                return True
 
 
 def db_table_rows_count(table_name):
@@ -433,7 +439,9 @@ async def idea_acquired(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
     table_name = 'db' + str(telegram_id)
     db_update_result = update_db(table_name, 'text', user_idea, telegram_id)
-    if db_update_result:
+    if db_update_result == 'there_is_double':
+        await message.answer('У вас уже есть эта идея. Сохранение не требуется.')
+    elif db_update_result == 'idea_saved':
         await message.answer('Идея успешно сохранена.')
     else:
         await message.answer('Идея не сохранилась, что-то пошло не так.')
