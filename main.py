@@ -264,10 +264,11 @@ def update_db(table_name, data_field, data, telegram_id=None):
     with connection.cursor() as cursor:
         try:
             double_check_query = f"SELECT * FROM `{table_name}` WHERE `{data_field}` = '{data}';"
-            logging.info(f'Checking if {data} is present in the {table_name} already...')
+            logging.info(f'Checking if {data} is present in the {data_field} field '
+                         f'of the {table_name} table...')
             cursor.execute(double_check_query)
             result = cursor.fetchall()
-            if result:
+            if result and data_field != 'last_sent_id':
                 logging.info(f'{data} is present in the {table_name} already.')
                 return 'there_is_double'
             else:
