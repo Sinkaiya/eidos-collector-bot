@@ -7,7 +7,7 @@ import time
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Text
+from aiogram.utils.exceptions import BotBlocked
 from aiogram.dispatcher.filters.state import State, StatesGroup
 import aiogram.utils.markdown as fmt
 from mysql.connector import connect
@@ -381,7 +381,12 @@ async def send_text_to_users(text=None):
                 new_last_sent_id = 1
 
             new_text_to_send = get_text(user_table_name, new_last_sent_id)
-            await bot.send_message(telegram_id, new_text_to_send)
+            try:
+                await bot.send_message(telegram_id, new_text_to_send)
+            except BotBlocked as e:
+                logging.error(f'An attempt to send message to user {telegram_id} failed:'
+                              f' {e}', exc_info=True)
+                continue
 
             update_db('users', 'last_sent_id', new_last_sent_id, telegram_id)
 
