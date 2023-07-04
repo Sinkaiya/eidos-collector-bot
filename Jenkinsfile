@@ -14,6 +14,7 @@ pipeline
                         steps
                             {
                                 echo 'Building...'
+                                sh 'pwd'
                                 sh 'docker build --tag=eidosbot .'
                             }
                     }
