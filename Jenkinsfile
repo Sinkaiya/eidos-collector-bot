@@ -14,8 +14,7 @@ pipeline
                         steps
                             {
                                 echo 'Building...'
-                                sh 'pwd'
-                                sh 'ls -lah'
+                                sh 'cp /home/sinkaiya/eidos-collector-bot/config.ini ./'
                                 sh 'docker build --tag=eidosbot .'
                             }
                     }
