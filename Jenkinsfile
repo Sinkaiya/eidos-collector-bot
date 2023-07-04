@@ -15,6 +15,7 @@ pipeline
                             {
                                 echo 'Building...'
                                 sh 'pwd'
+                                sh 'ls -lah'
                                 sh 'docker build --tag=eidosbot .'
                             }
                     }
