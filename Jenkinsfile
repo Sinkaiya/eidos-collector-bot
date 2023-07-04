@@ -14,12 +14,7 @@ pipeline
                         steps
                             {
                                 echo 'Building...'
-                                script {
-                                    docker.build(
-                                        'eidosbot',
-                                        '-f Dockerfile .'
-                                    )
-                                }
+                                sh 'docker build --tag=eidosbot .'
                             }
                     }
                 stage('Run')
